@@ -1,0 +1,57 @@
+# Ignore everything in data/
+data/*
+
+# --- Environment variables ---
+.env
+
+# --- Python junk ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+*.log
+
+# --- Virtual environments ---
+venv/
+env/
+.venv/
+ENV/
+
+# --- Build / packaging ---
+build/
+dist/
+*.manifest
+*.spec
+
+# --- Jupyter notebooks checkpoints ---
+.ipynb_checkpoints/
+
+# --- Cache / temporary files ---
+*.cache/
+*.coverage
+*.pytest_cache/
+.coverage.*
+.cache/
+.mypy_cache/
+.dmypy.json
+.pyre/
+
+# --- IDE / editor settings ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- RAG-specific artifacts ---
+# Vector database files (if persisted locally)
+chroma/
+faiss_index/
+weaviate_data/
+milvus_data/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
