@@ -90,3 +90,44 @@ To handle "Thundering Herds" (30 teachers clicking 'Generate' at once), we use a
 * [ ] **UI:** Simple React/Streamlit app.
 * [ ] **Load Test:** Simulate 50 concurrent requests.
 * [ ] **Deploy:** Push to Cloud Run (API) + Neon/Supabase (DB).
+
+## **Appendix: Future Scaling Strategy (Post-MVP)**
+
+**Context:** The MVP uses a single `content_atoms` table with a GIN index on metadata. This works perfectly for `<10M` rows (approx. 500–1,000 textbooks).  
+**Trigger:** When query latency > 200 ms or table size > 50 GB.  
+**Strategy:** “Transparent Partitioning” — move from logical filtering (scanning one big index) to physical scanning (small per-book tables) without changing the application code.
+
+### 1\. The Migration Pattern
+
+We keep the `content_atoms` table as a “Master Interface” but use Postgres inheritance to route data.
+
+**Step 1: Rename the old table to be the first partition**
+```sql
+ALTER TABLE content_atoms RENAME TO content_atoms_legacy;
+```
+
+**Step 2: Create the new parent table (partitioned)**
+```sql
+CREATE TABLE content_atoms (
+    id UUID DEFAULT gen_random_uuid(),
+    text VARCHAR,
+    metadata_ JSONB,
+    node_id VARCHAR,
+    embedding VECTOR(1536),
+    book_id VARCHAR GENERATED ALWAYS AS (metadata_->>'book_id') STORED, -- Auto-extracted column
+    PRIMARY KEY (id, book_id)
+) PARTITION BY LIST (book_id);
+```
+
+**Step 3: Attach partitions dynamically**
+```sql
+CREATE TABLE content_book_101 PARTITION OF content_atoms FOR VALUES IN ('book_uuid_101');
+```
+
+### 2\. Why This Works
+
+* **App Logic:** The Python app still inserts into `content_atoms`.  
+* **DB Logic:** Postgres automatically extracts `book_id` from the metadata JSON and routes the row to the correct physical file on disk.  
+* **Performance:** Queries for `book_id='101'` only open one small file instead of scanning the terabyte-sized index.
+
+**Summary:** We do not need to over-engineer this today. The “Metadata First” design we chose for the MVP is forward-compatible with this partitioning strategy.
