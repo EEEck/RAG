@@ -7,6 +7,8 @@ from pathlib import Path
 from .hybrid_ingestor import HybridIngestor
 from .models import StructureNode, ContentAtom
 from . import db
+from app.config import get_settings
+from app.openai_client import get_sync_client
 
 def mock_embedding(text: str) -> List[float]:
     """Generates a random 1536-dim vector for testing."""
@@ -14,10 +16,25 @@ def mock_embedding(text: str) -> List[float]:
     random.seed(len(text))
     return [random.random() for _ in range(1536)]
 
+def generate_embeddings(texts: List[str]) -> List[List[float]]:
+    """Generates embeddings using the OpenAI client."""
+    client = get_sync_client()
+    settings = get_settings()
+
+    # OpenAI suggests replacing newlines with spaces for best results
+    cleaned_texts = [t.replace("\n", " ") for t in texts]
+
+    response = client.embeddings.create(
+        input=cleaned_texts,
+        model=settings.embed_model
+    )
+    # The response.data is a list of embedding objects, sorted by index.
+    return [d.embedding for d in response.data]
+
 def run_ingestion(
     file_path: str,
     book_id: Optional[uuid.UUID] = None,
-    should_mock_embedding: bool = True
+    should_mock_embedding: bool = False
 ) -> None:
     """
     Runs the full ingestion pipeline for a given document.
@@ -51,11 +68,24 @@ def run_ingestion(
     print(f"Parsed {len(nodes)} structure nodes and {len(atoms)} content atoms.")
 
     # 2. Enrich (Embeddings)
-    # TODO: Integrate real embedding call here
     if should_mock_embedding:
         print("Generating mock embeddings...")
         for atom in atoms:
             atom.embedding = mock_embedding(atom.content_text)
+    else:
+        print("Generating real embeddings...")
+        # Batch process atoms to avoid too many API calls
+        BATCH_SIZE = 100
+        for i in range(0, len(atoms), BATCH_SIZE):
+            batch = atoms[i:i + BATCH_SIZE]
+            texts = [atom.content_text for atom in batch]
+            try:
+                embeddings = generate_embeddings(texts)
+                for atom, emb in zip(batch, embeddings):
+                    atom.embedding = emb
+            except Exception as e:
+                print(f"Error generating embeddings for batch {i}: {e}")
+                raise
 
     # 3. Persist
     print("Connecting to DB...")
