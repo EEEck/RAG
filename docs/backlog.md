@@ -33,6 +33,10 @@
     *   Draft Async API endpoints (`/generate/quiz`). (Done)
 
 ## Next Steps (Week 2 Priorities)
-1.  **Enrichment Engine:** Implement Vision AI (Image description) and Embedding generation logic (using `HybridIngestor` output).
+1.  **Enrichment Engine:**
+    *   Implement Database Persistence (Insert Logic). (🟢 Done)
+    *   Implement End-to-End Pipeline (Notebook/Script). (🟢 Done)
+    *   Implement Vision AI (Image description). (🔴 Pending)
+    *   Switch to Real Embeddings (Gemini/OpenAI). (🟡 In Progress)
 2.  **Curriculum Guard:** Implement the SQL query logic for `retrieve_and_generate`.
 3.  **LLM Switch:** Move from OpenAI to Gemini Flash.
