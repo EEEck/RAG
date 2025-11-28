@@ -1,0 +1,67 @@
+# System Architecture
+
+## Overview
+
+The ESL RAG Backend is designed to ingest educational content (textbooks, PDF documents) and provide a semantic search and question-generation interface. It utilizes a hybrid approach to document parsing and a vector-database-backed retrieval engine.
+
+### Core Components
+
+1.  **FastAPI Service (`app/`)**:
+    *   Exposes endpoints for Search (`/search`), Concept Retrieval (`/concept`), and Quiz Generation (`/generate/quiz`).
+    *   Handles request validation and orchestrates async tasks via Celery.
+
+2.  **Ingestion Engine (`ingest/`)**:
+    *   **Hybrid Ingestor**: Combines local `Docling` parsing with fallback to `LlamaParse` (Cloud) and `OpenAI VLM` (Vision Language Model) for complex or handwritten content.
+    *   **Structure Nodes**: Maintains the hierarchical structure of books (Units, Lessons) in a relational format.
+    *   **Content Atoms**: Granular chunks of text/images stored with vector embeddings for semantic search.
+
+3.  **Data Storage**:
+    *   **PostgreSQL**:
+        *   `structure_nodes` table: Stores hierarchy.
+        *   `content_atoms` table: Stores text chunks and vectors (via `pgvector`).
+    *   **Redis**: Used as the message broker for Celery and result backend for async jobs.
+
+4.  **Celery Workers**:
+    *   Handle long-running tasks like Quiz Generation to keep the API responsive.
+
+---
+
+## Production Scaling Strategy
+
+This section outlines how the system is designed to scale to meet the requirements of **1000s of textbooks** and **100s of active users** querying specific books.
+
+### 1. Ingestion Scaling (1000s of Textbooks)
+
+Ingesting thousands of PDFs is a compute-intensive and I/O-heavy process.
+
+*   **Asynchronous Processing Pipeline**:
+    *   Ingestion requests should never block the API. We utilize Celery to offload ingestion tasks (`ingest.pipeline.run_ingestion`) to background workers.
+    *   **Queue Management**: Use a dedicated Celery queue (e.g., `ingest_queue`) separate from high-priority user tasks (like Quiz Generation). This ensures that a massive ingestion backlog doesn't degrade user experience.
+
+*   **Horizontal Worker Scaling**:
+    *   The parsing (Docling/OCR) and embedding (OpenAI) steps are parallelizable at the book level.
+    *   Deploy multiple Celery worker instances across different nodes. Since `Docling` runs locally, CPU/RAM resources on workers must be sized according to the complexity of PDFs.
+
+*   **Database Optimization**:
+    *   **Batch Inserts**: Ensure `content_atoms` are inserted in batches rather than one by one to reduce round-trips.
+    *   **Index Management**: Creating HNSW indexes (used by `pgvector`) is expensive. For bulk ingestion of 1000s of books, it may be efficient to drop the vector index, ingest all data, and rebuild the index, or use partitioning strategies (see below).
+
+### 2. Retrieval Scaling (100s of Users)
+
+While 100s of users is not "web scale", providing low-latency semantic search over a corpus of 1000s of books requires optimization.
+
+*   **Targeted Search (Metadata Filtering)**:
+    *   Users typically query *specific* books (e.g., "Show me vocabulary from Book A").
+    *   We leverage the `book_id` metadata column in `pgvector`.
+    *   **Partitioning**: In a production Postgres setup, we would partition the `content_atoms` table by `book_id` (list partitioning) or hash partitioning. This allows the query planner to scan only the relevant partitions, drastically reducing search time compared to scanning a monolithic index of 1000 books.
+
+*   **Caching Strategy**:
+    *   Implement **Redis Caching** for frequent queries. If multiple students in a class ask "What is the summary of Unit 1?", the embedding generation and DB lookup should only happen once.
+    *   Cache keys: `hash(book_id + query_text)`.
+
+*   **Read Replicas**:
+    *   If read traffic increases significantly, deploy PostgreSQL Read Replicas. The application can offload `SELECT` queries (searches) to replicas while writes (ingestion) go to the primary.
+
+*   **Embedding Latency**:
+    *   The bottleneck for search is often generating the query embedding (OpenAI API call).
+    *   To mitigate this, ensure the backend runs in a region with low latency to OpenAI's API, or switch to a high-performance local embedding model (e.g., ONNX runtime) if latency becomes critical.

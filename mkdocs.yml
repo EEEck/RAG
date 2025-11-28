@@ -1,0 +1,16 @@
+site_name: ESL RAG Backend
+theme:
+  name: material
+
+plugins:
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - API Reference: api_reference.md
+  - RAG Concepts: rag_concepts.md
+  - User Manual: user_manual.md

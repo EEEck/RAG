@@ -52,6 +52,9 @@ faiss_index/
 weaviate_data/
 milvus_data/
 
+# --- Documentation ---
+site/
+
 # --- OS junk ---
 .DS_Store
 Thumbs.db
