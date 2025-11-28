@@ -1,36 +1,38 @@
-# Backlog & Status
+# Project Analysis & Backlog
 
-## Docker & Infra
-- [x] Local Dockerfile + docker-compose (app + pgvector) using `.env` for secrets.
-- [ ] Add image build cache optimization (multi-stage, slim runtime).
-- [ ] Wire migration/seed command for Postgres (pgvector extension check).
+## Current State Analysis
+*   **Ingestion:** `HybridIngestor` (Docling + LlamaParse) is implemented in `ingest/hybrid_ingestor.py`.
+*   **Database:** `structure_nodes` and `content_atoms` schema with partitioning is defined and applied.
+*   **Embeddings:** Configured for OpenAI (`text-embedding-3-large`, 1536 dim) as per current constraint, pending switch to Gemini.
+*   **API:** Async endpoints (`/generate/quiz`) and Celery worker (`app/celery_worker.py`) are set up.
+*   **Infrastructure:** `docker-compose.yml` includes Redis and Celery services.
 
-## Ingestion & Data
-- [ ] CLI entrypoint to run Docling parse + lesson/vocab ingestion into Postgres.
-- [ ] Unit/lesson segmentation rule tuning per textbook.
-- [ ] Vocab-at-end linking verification across books.
+## Gap Analysis (Required vs. Existing)
+| Feature | Current | Required | Status |
+| :--- | :--- | :--- | :--- |
+| **Schema** | `structure_nodes`, `content_atoms` (partitioned) | `structure_nodes`, `content_atoms` (partitioned) | 🟢 Done |
+| **Ingestion** | `HybridIngestor` class | Docling (PDF) -> Check -> LlamaParse (Fallback) | 🟢 Done |
+| **Search** | OpenAI (1536) | Gemini Flash (768) | 🔴 Switch Provider |
+| **Async** | Celery + Redis | Celery + Redis | 🟢 Done |
+| **Curriculum**| Basic filtering | Strict `sequence_index` enforcement | 🟡 Partial |
 
-## Retrieval / API
-- [x] Add FastAPI endpoints for lesson search and vocab search (uses pgvector).
-- [x] Add concept-pack builder and scope-aware query path.
-- [ ] Reranker integration for short queries.
+## Parallelizable Work Streams
+1.  **Database & Schema Foundation:**
+    *   Setup PostgreSQL partitioning. (Done)
+    *   Implement `structure_nodes` and `content_atoms` DDL. (Done)
+    *   Create `create_book_partition` function. (Done)
 
-## Users & Persistence
-- [ ] Add user store (accounts, saved textbooks, saved queries).
-- [ ] AuthN (token) + simple rate limiting.
-- [ ] Teacher profile persistence and lesson selection history.
+2.  **Ingestion Engine:**
+    *   Implement `HybridIngestor` class. (Done)
+    *   Integrate `docling` library and `llama_parse`. (Done)
+    *   Implement "Router Logic" for quality gating. (Done)
 
-## Observability & Ops
-- [ ] Logging/metrics middleware; request IDs.
-- [ ] Basic E2E test in CI (docker-compose up, smoke test /health).
-- [ ] Remove remaining Azure-specific hooks; keep template folder optional.
+3.  **Infrastructure & API:**
+    *   Add Redis to Docker Compose. (Done)
+    *   Setup Celery worker structure. (Done)
+    *   Draft Async API endpoints (`/generate/quiz`). (Done)
 
-## Testing & QA
-- [ ] Expand pytest coverage for ingestion (Docling parse, segmentation, vocab link) and API routes (/search, /concept/*).
-- [ ] Add coverage run target (e.g., `pytest --cov=app --cov=ingest`) and track % in CI.
-- [ ] Add DB-backed test fixtures (spinning pgvector via docker-compose) for search/concept-pack.
-- [ ] Stub LLM calls in tests via responses/mocking to make generation deterministic.
-
-## Frontend (later)
-- [ ] Hook frontend to FastAPI (/concept-pack, /generate-items).
-- [ ] Add PDF export and item editor.
+## Next Steps (Week 2 Priorities)
+1.  **Enrichment Engine:** Implement Vision AI (Image description) and Embedding generation logic (using `HybridIngestor` output).
+2.  **Curriculum Guard:** Implement the SQL query logic for `retrieve_and_generate`.
+3.  **LLM Switch:** Move from OpenAI to Gemini Flash.

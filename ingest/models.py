@@ -1,10 +1,33 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any, List
 
 
 BBox = Tuple[float, float, float, float]
+
+
+@dataclass
+class StructureNode:
+    id: uuid.UUID
+    book_id: uuid.UUID
+    parent_id: Optional[uuid.UUID]
+    node_level: int
+    title: str
+    sequence_index: int
+    meta_data: Dict[str, Any]
+
+
+@dataclass
+class ContentAtom:
+    id: uuid.UUID
+    book_id: uuid.UUID
+    node_id: Optional[uuid.UUID]
+    atom_type: str
+    content_text: str
+    meta_data: Dict[str, Any]
+    embedding: Optional[List[float]] = None
 
 
 @dataclass
