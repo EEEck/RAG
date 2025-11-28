@@ -16,6 +16,12 @@ from .models import StructureNode, ContentAtom
 from .openai_ingestor import OpenAIIngestor
 
 class HybridIngestor:
+    """
+    A unified ingestor that attempts to parse documents using multiple strategies:
+    1. Docling (Primary): Fast, local parsing.
+    2. LlamaParse (Fallback): For complex layouts/tables if Docling struggles.
+    3. OpenAI VLM (Fallback): For handwritten or very poor quality scans.
+    """
     def __init__(self):
         self.docling = DocumentConverter()
         self.llama_api_key = os.getenv("LLAMA_CLOUD_API_KEY")
@@ -31,6 +37,16 @@ class HybridIngestor:
              self.openai_ingestor = None
 
     def ingest_book(self, file_path: str, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+        """
+        Ingests a book from a given file path, attempting strategies in order.
+
+        Args:
+            file_path (str): The path to the document file.
+            book_id (uuid.UUID): The unique identifier for the book.
+
+        Returns:
+            Tuple[List[StructureNode], List[ContentAtom]]: A tuple containing a list of structure nodes and a list of content atoms.
+        """
         print(f"Starting Docling for {file_path}...")
         try:
             doc = self.docling.convert(file_path)
@@ -57,6 +73,10 @@ class HybridIngestor:
             return self.ingest_with_openai(file_path, book_id)
 
     def _needs_fallback(self, data) -> bool:
+        """
+        Determines if the Docling output indicates complexity requiring LlamaParse.
+        Heuristic: High percentage of empty tables.
+        """
         # Heuristic: If >20% of tables have no text, or heavily nested structures found
         tables = data.get('tables', [])
         if not tables:
@@ -68,6 +88,9 @@ class HybridIngestor:
         return False
 
     def _is_poor_quality_or_handwritten(self, data) -> bool:
+        """
+        Determines if the Docling output is too sparse, suggesting handwriting/images.
+        """
         # Heuristic: Very little text extracted relative to pages, or mostly empty structure
         # This is a simple placeholder heuristic.
         texts = data.get("texts", [])
@@ -76,6 +99,16 @@ class HybridIngestor:
         return False
 
     def ingest_with_llama(self, file_path: str, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+        """
+        Ingests a book using LlamaParse (Cloud).
+
+        Args:
+            file_path (str): Path to the file.
+            book_id (uuid.UUID): Book ID.
+
+        Returns:
+            Tuple[List[StructureNode], List[ContentAtom]]: Parsed nodes and atoms.
+        """
         if not self.llama:
             # Fallback if key missing: raise error to trigger next fallback
             raise ValueError("LlamaParse not configured or key missing.")
@@ -122,6 +155,17 @@ class HybridIngestor:
         return nodes, atoms
 
     def ingest_with_openai(self, file_path: str, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+        """
+        Ingests a book using OpenAI's Vision Language Model (VLM).
+        This converts PDF pages to images and sends them to GPT-4o.
+
+        Args:
+            file_path (str): Path to the file.
+            book_id (uuid.UUID): Book ID.
+
+        Returns:
+            Tuple[List[StructureNode], List[ContentAtom]]: Parsed nodes and atoms.
+        """
         if not self.openai_ingestor:
              raise ValueError("OpenAI API Key not set. Cannot use OpenAI Fallback.")
 
@@ -190,6 +234,16 @@ class HybridIngestor:
         return nodes, atoms
 
     def _parse_docling_structure(self, data: Dict, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+        """
+        Converts raw Docling JSON output into internal StructureNode and ContentAtom objects.
+
+        Args:
+            data (Dict): The dictionary export from Docling.
+            book_id (uuid.UUID): Book ID.
+
+        Returns:
+            Tuple[List[StructureNode], List[ContentAtom]]: Parsed nodes and atoms.
+        """
         # Maps Docling Headers -> DB structure_nodes
         # Maps Text/Images -> DB content_atoms
 

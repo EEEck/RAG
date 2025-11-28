@@ -19,6 +19,11 @@ from app.config import get_settings
 def index_atoms_to_postgres(atoms: List[ContentAtom], should_mock_embedding: bool = False):
     """
     Converts ContentAtoms to LlamaIndex TextNodes and persists them to Postgres via PGVectorStore.
+
+    Args:
+        atoms (List[ContentAtom]): List of content atoms to be indexed.
+        should_mock_embedding (bool): If True, uses a mock embedding model (for testing).
+                                      Defaults to False (uses OpenAI).
     """
     if not atoms:
         print("No atoms to index.")
@@ -85,6 +90,19 @@ def run_ingestion(
 ) -> None:
     """
     Runs the full ingestion pipeline for a given document.
+
+    This process involves:
+    1. Parsing the document using `HybridIngestor`.
+    2. Persisting structure nodes to the Relational DB.
+    3. Generating embeddings and persisting content atoms to the Vector DB.
+
+    Args:
+        file_path (str): Path to the source file (PDF, JSON, etc.).
+        book_id (Optional[uuid.UUID]): Unique identifier for the book. Generated if not provided.
+        should_mock_embedding (bool): Whether to use mock embeddings. Defaults to False.
+
+    Raises:
+        Exception: If any step of the ingestion process fails.
     """
     if book_id is None:
         book_id = uuid.uuid4()
