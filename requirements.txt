@@ -7,6 +7,7 @@ llama-index-core
 llama-index-readers-docling
 llama-index-embeddings-openai
 llama-index-node-parser-docling
+llama-index-vector-stores-postgres
 openai
 psycopg[binary]
 pgvector
