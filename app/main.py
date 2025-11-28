@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import os
+import uuid
 from pathlib import Path
 from typing import Dict
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from pydantic import BaseModel
+from celery.result import AsyncResult
 
 from .config import get_settings
 from .routes import search, concept
+from .celery_worker import generate_quiz_task
 
 # Load environment variables (expects OPENAI_API_KEY, PG creds in .env)
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
@@ -16,6 +20,33 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 app = FastAPI(title="ESL RAG Backend", version="0.1.0")
 app.include_router(search.router)
 app.include_router(concept.router)
+
+
+class QuizRequest(BaseModel):
+    book_id: str
+    unit: int
+    topic: str
+
+
+@app.post("/generate/quiz")
+async def start_quiz_generation(req: QuizRequest):
+    # We generate a UUID for the job context, but we return the Celery task ID
+    user_job_id = str(uuid.uuid4())
+    task = generate_quiz_task.delay(user_job_id, req.book_id, req.unit, req.topic)
+    return {"job_id": task.id, "status": "queued"}
+
+
+@app.get("/jobs/{job_id}")
+async def get_job_status(job_id: str):
+    result = AsyncResult(job_id, app=generate_quiz_task.app)
+    if result.state == 'PENDING':
+        return {"status": "processing"}
+    elif result.state == 'SUCCESS':
+        return {"status": "complete", "data": result.result}
+    elif result.state == 'FAILURE':
+        return {"status": "failed", "error": str(result.result)}
+    else:
+        return {"status": result.state}
 
 
 @app.get("/health")

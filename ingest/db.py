@@ -1,55 +1,55 @@
 from __future__ import annotations
-
-from typing import Iterable, Sequence
-
-from .models import LessonChunk, VocabEntry
-
+import uuid
+from typing import Dict, Any, List
 
 SCHEMA_SQL = """
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE IF NOT EXISTS textbook (
-  id           TEXT PRIMARY KEY,
-  brand        TEXT,
-  edition      TEXT,
-  locale       TEXT,
-  grade_from   INT,
-  grade_to     INT
+-- Drop old tables if they exist
+DROP TABLE IF EXISTS vocab_entry;
+DROP TABLE IF EXISTS lesson;
+DROP TABLE IF EXISTS textbook;
+
+-- 1. Structure Nodes
+CREATE TABLE IF NOT EXISTS structure_nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    book_id UUID NOT NULL,
+    parent_id UUID REFERENCES structure_nodes(id),
+    node_level INTEGER, -- 0=Book, 1=Unit, 2=Section
+    title TEXT,
+    sequence_index INTEGER,
+    meta_data JSONB
 );
 
-CREATE TABLE IF NOT EXISTS lesson (
-  id           BIGSERIAL PRIMARY KEY,
-  textbook_id  TEXT REFERENCES textbook(id),
-  unit         INT,
-  lesson_code  TEXT,
-  title        TEXT,
-  summary_json JSONB,
-  details_md   TEXT,
-  page_start   INT,
-  page_end     INT,
-  emb          VECTOR(1536),
-  created_at   TIMESTAMPTZ DEFAULT now()
-);
+-- 2. Content Atoms (Partitioned Parent Table)
+CREATE TABLE IF NOT EXISTS content_atoms (
+    id UUID DEFAULT gen_random_uuid(),
+    book_id UUID NOT NULL,
+    node_id UUID REFERENCES structure_nodes(id),
+    atom_type VARCHAR(50), -- 'text', 'image_desc', 'equation_latex', 'vocab_card'
+    content_text TEXT,
+    embedding vector(1536), -- OpenAI Dimension
+    meta_data JSONB,
+    PRIMARY KEY (id, book_id)
+) PARTITION BY LIST (book_id);
 
-CREATE TABLE IF NOT EXISTS vocab_entry (
-  id           BIGSERIAL PRIMARY KEY,
-  textbook_id  TEXT REFERENCES textbook(id),
-  unit         INT,
-  lesson_code  TEXT,
-  term         TEXT,
-  lemma        TEXT,
-  pos          TEXT,
-  definition   TEXT,
-  example      TEXT,
-  page         INT,
-  emb          VECTOR(1536),
-  created_at   TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS lesson_textbook_idx ON lesson(textbook_id, unit, lesson_code);
-CREATE INDEX IF NOT EXISTS vocab_textbook_idx ON vocab_entry(textbook_id, unit, lesson_code);
-CREATE INDEX IF NOT EXISTS lesson_emb_hnsw ON lesson USING hnsw (emb vector_cosine_ops);
-CREATE INDEX IF NOT EXISTS vocab_emb_hnsw ON vocab_entry USING hnsw (emb vector_cosine_ops);
+-- 3. Function to Auto-Create Partitions
+CREATE OR REPLACE FUNCTION create_book_partition(new_book_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    partition_name TEXT;
+BEGIN
+    partition_name := 'content_book_' || replace(new_book_id::text, '-', '_');
+    EXECUTE format(
+        'CREATE TABLE IF NOT EXISTS %I PARTITION OF content_atoms FOR VALUES IN (%L)',
+        partition_name, new_book_id
+    );
+    EXECUTE format(
+        'CREATE INDEX ON %I USING hnsw (embedding vector_cosine_ops)',
+        partition_name
+    );
+END;
+$$ LANGUAGE plpgsql;
 """
 
 
@@ -59,52 +59,7 @@ def ensure_schema(conn) -> None:
     conn.commit()
 
 
-def insert_lessons(conn, lessons: Iterable[LessonChunk], embeddings: Sequence[Sequence[float]] | None = None) -> None:
-    data = list(lessons)
+def create_partition(conn, book_id: uuid.UUID) -> None:
     cur = conn.cursor()
-    for idx, lesson in enumerate(data):
-        emb = embeddings[idx] if embeddings is not None else None
-        cur.execute(
-            """
-            INSERT INTO lesson (textbook_id, unit, lesson_code, title, summary_json, details_md, page_start, page_end, emb)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                lesson.textbook_id,
-                lesson.unit,
-                lesson.lesson_code,
-                lesson.title,
-                None,
-                lesson.body,
-                lesson.page_start,
-                lesson.page_end,
-                emb,
-            ),
-        )
-    conn.commit()
-
-
-def insert_vocab(conn, vocab: Iterable[VocabEntry], embeddings: Sequence[Sequence[float]] | None = None) -> None:
-    data = list(vocab)
-    cur = conn.cursor()
-    for idx, entry in enumerate(data):
-        emb = embeddings[idx] if embeddings is not None else None
-        cur.execute(
-            """
-            INSERT INTO vocab_entry (textbook_id, unit, lesson_code, term, lemma, pos, definition, example, page, emb)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                entry.textbook_id,
-                entry.unit,
-                entry.lesson_code,
-                entry.term,
-                entry.lemma,
-                entry.pos,
-                entry.definition,
-                entry.example,
-                entry.page,
-                emb,
-            ),
-        )
+    cur.execute("SELECT create_book_partition(%s)", (book_id,))
     conn.commit()

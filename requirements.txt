@@ -10,3 +10,6 @@ llama-index-node-parser-docling
 openai
 psycopg[binary]
 pgvector
+celery
+redis
+llama-parse
