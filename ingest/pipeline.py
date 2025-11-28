@@ -3,33 +3,80 @@ import os
 import random
 from typing import List, Optional
 from pathlib import Path
+import json
+
+from llama_index.core import VectorStoreIndex, StorageContext
+from llama_index.core.schema import TextNode
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.vector_stores.postgres import PGVectorStore
+from llama_index.core.embeddings import MockEmbedding
 
 from .hybrid_ingestor import HybridIngestor
 from .models import StructureNode, ContentAtom
 from . import db
 from app.config import get_settings
-from app.openai_client import get_sync_client
 
-def mock_embedding(text: str) -> List[float]:
-    """Generates a random 1536-dim vector for testing."""
-    # Deterministic random based on text length to have repeatable results in dev
-    random.seed(len(text))
-    return [random.random() for _ in range(1536)]
+def index_atoms_to_postgres(atoms: List[ContentAtom], should_mock_embedding: bool = False):
+    """
+    Converts ContentAtoms to LlamaIndex TextNodes and persists them to Postgres via PGVectorStore.
+    """
+    if not atoms:
+        print("No atoms to index.")
+        return
 
-def generate_embeddings(texts: List[str]) -> List[List[float]]:
-    """Generates embeddings using the OpenAI client."""
-    client = get_sync_client()
-    settings = get_settings()
+    print("Converting atoms to LlamaIndex Nodes...")
+    nodes = []
+    for atom in atoms:
+        # Map metadata
+        # We store key identifiers in metadata for filtering/retrieval
+        metadata = {
+            "book_id": str(atom.book_id),
+            "node_id": str(atom.node_id) if atom.node_id else None,
+            "atom_type": atom.atom_type,
+            **atom.meta_data
+        }
 
-    # OpenAI suggests replacing newlines with spaces for best results
-    cleaned_texts = [t.replace("\n", " ") for t in texts]
+        # Create a LlamaIndex TextNode
+        node = TextNode(
+            text=atom.content_text,
+            metadata=metadata
+        )
+        nodes.append(node)
 
-    response = client.embeddings.create(
-        input=cleaned_texts,
-        model=settings.embed_model
+    print(f"Created {len(nodes)} nodes. Connecting to Postgres (LlamaIndex)...")
+
+    # Setup Vector Store
+    # Uses environment variables for connection or defaults, matching db.py
+    vector_store = PGVectorStore.from_params(
+        database=os.getenv("POSTGRES_DB", "rag"),
+        host=os.getenv("POSTGRES_HOST", "localhost"),
+        password=os.getenv("POSTGRES_PASSWORD", "rag"),
+        port=int(os.getenv("POSTGRES_PORT", 5432)),
+        user=os.getenv("POSTGRES_USER", "rag"),
+        table_name="content_atoms",
+        embed_dim=1536
     )
-    # The response.data is a list of embedding objects, sorted by index.
-    return [d.embedding for d in response.data]
+
+    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+    # Setup Embedding Model
+    if should_mock_embedding:
+        print("Using Mock Embeddings...")
+        embed_model = MockEmbedding(embed_dim=1536)
+    else:
+        print("Using OpenAI Embeddings...")
+        embed_model = OpenAIEmbedding(
+            model="text-embedding-3-small",
+            api_key=os.getenv("OPENAI_API_KEY")
+        )
+
+    # Build Index (This pushes to DB)
+    VectorStoreIndex(
+        nodes,
+        storage_context=storage_context,
+        embed_model=embed_model
+    )
+    print("Success! Atoms Indexed into Postgres.")
 
 def run_ingestion(
     file_path: str,
@@ -47,69 +94,43 @@ def run_ingestion(
 
     # 1. Parse Document
     ingestor = HybridIngestor()
-    # If file_path ends in json, we might want to bypass ingest_book which calls docling.convert
-    # But HybridIngestor.ingest_book expects a file path.
-    # We'll need to modify HybridIngestor or handle JSON loading here if we want to support direct JSON injection
-    # For now, let's assume the ingestor can handle it or we use the _parse_docling_structure directly if JSON.
-
     nodes = []
     atoms = []
 
     if str(file_path).endswith(".json"):
-        import json
         print("Detected JSON input. Loading directly...")
         with open(file_path, "r") as f:
             data = json.load(f)
-        # We access the internal method for this test/dev scenario
         nodes, atoms = ingestor._parse_docling_structure(data, book_id)
     else:
         nodes, atoms = ingestor.ingest_book(str(file_path), book_id)
 
     print(f"Parsed {len(nodes)} structure nodes and {len(atoms)} content atoms.")
 
-    # 2. Enrich (Embeddings)
-    if should_mock_embedding:
-        print("Generating mock embeddings...")
-        for atom in atoms:
-            atom.embedding = mock_embedding(atom.content_text)
-    else:
-        print("Generating real embeddings...")
-        # Batch process atoms to avoid too many API calls
-        BATCH_SIZE = 100
-        for i in range(0, len(atoms), BATCH_SIZE):
-            batch = atoms[i:i + BATCH_SIZE]
-            texts = [atom.content_text for atom in batch]
-            try:
-                embeddings = generate_embeddings(texts)
-                for atom, emb in zip(batch, embeddings):
-                    atom.embedding = emb
-            except Exception as e:
-                print(f"Error generating embeddings for batch {i}: {e}")
-                raise
-
-    # 3. Persist
-    print("Connecting to DB...")
+    # 2. Persist Structure Nodes (Manual DB)
+    print("Connecting to DB for structure nodes...")
     conn = db.get_db_connection()
     try:
-        # Ensure partition exists
-        print(f"Creating partition for book {book_id}...")
-        db.create_partition(conn, book_id)
+        # Ensure schema exists (creates structure_nodes table if missing)
+        db.ensure_schema(conn)
 
         print("Inserting structure nodes...")
         db.insert_structure_nodes(conn, nodes)
-
-        print("Inserting content atoms...")
-        db.insert_content_atoms(conn, atoms)
-
-        print("Ingestion complete.")
     except Exception as e:
-        print(f"Error during DB operations: {e}")
+        print(f"Error during structure node insertion: {e}")
         conn.rollback()
         raise
     finally:
         conn.close()
 
+    # 3. Enrich & Persist Content Atoms (LlamaIndex)
+    try:
+        index_atoms_to_postgres(atoms, should_mock_embedding)
+    except Exception as e:
+        print(f"Error during LlamaIndex indexing: {e}")
+        raise
+
+    print("Ingestion complete.")
+
 if __name__ == "__main__":
-    # Example usage
-    # run_ingestion("data/toy_green_line_1_docling.json")
     pass

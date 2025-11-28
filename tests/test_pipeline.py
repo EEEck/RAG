@@ -11,12 +11,15 @@ sys.path.append(os.path.abspath("."))
 from ingest.pipeline import run_ingestion
 from ingest import db
 from ingest.models import StructureNode, ContentAtom
+from llama_index.core.schema import TextNode
 
 class TestIngestionPipeline(unittest.TestCase):
 
+    @patch("ingest.pipeline.PGVectorStore")
+    @patch("ingest.pipeline.VectorStoreIndex")
     @patch("ingest.db.psycopg.connect")
     @patch("ingest.hybrid_ingestor.HybridIngestor.ingest_book")
-    def test_run_ingestion_flow(self, mock_ingest_book, mock_connect):
+    def test_run_ingestion_flow(self, mock_ingest_book, mock_connect, mock_vector_index, mock_pg_store):
         # Setup Mock DB
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -36,39 +39,44 @@ class TestIngestionPipeline(unittest.TestCase):
 
         mock_ingest_book.return_value = (mock_nodes, mock_atoms)
 
+        # Mock VectorStore and Index
+        mock_store_instance = MagicMock()
+        mock_pg_store.from_params.return_value = mock_store_instance
+
         # Run Pipeline
         run_ingestion("dummy.pdf", book_id=book_id, should_mock_embedding=True)
 
         # Assertions
 
-        # 1. Check DB Connection
-        mock_connect.assert_called_once()
+        # 1. Check DB Connection (Structure Nodes)
+        mock_connect.assert_called()
 
-        # 2. Check Partition Creation
-        # create_partition calls "SELECT create_book_partition(%s)"
-        mock_cursor.execute.assert_any_call("SELECT create_book_partition(%s)", (book_id,))
-
-        # 3. Check Insertions
-        # We expect executemany to be called twice (nodes and atoms)
-        self.assertEqual(mock_cursor.executemany.call_count, 2)
+        # 2. Check Insertions
+        # We expect executemany to be called ONCE (structure nodes only)
+        # Note: ensure_schema calls execute, but not executemany
+        self.assertEqual(mock_cursor.executemany.call_count, 1)
 
         # Verify Node Insert
         args_nodes = mock_cursor.executemany.call_args_list[0]
         sql_nodes = args_nodes[0][0]
         self.assertIn("INSERT INTO structure_nodes", sql_nodes)
 
-        # Verify Atom Insert
-        args_atoms = mock_cursor.executemany.call_args_list[1]
-        sql_atoms = args_atoms[0][0]
-        self.assertIn("INSERT INTO content_atoms", sql_atoms)
+        # 3. Check LlamaIndex Usage
+        mock_pg_store.from_params.assert_called_once()
+        mock_vector_index.assert_called_once()
 
-        # 4. Verify Embeddings Mocked
-        # The passed atom object should now have an embedding
-        self.assertIsNotNone(mock_atoms[0].embedding)
-        self.assertEqual(len(mock_atoms[0].embedding), 1536)
+        # Check that nodes passed to VectorStoreIndex correspond to atoms
+        args_index, _ = mock_vector_index.call_args
+        passed_nodes = args_index[0] # first arg is nodes list
+        self.assertEqual(len(passed_nodes), 1)
+        self.assertIsInstance(passed_nodes[0], TextNode)
+        self.assertEqual(passed_nodes[0].text, "Hello World")
+        self.assertEqual(passed_nodes[0].metadata["book_id"], str(book_id))
 
+    @patch("ingest.pipeline.PGVectorStore")
+    @patch("ingest.pipeline.VectorStoreIndex")
     @patch("ingest.db.psycopg.connect")
-    def test_json_loading(self, mock_connect):
+    def test_json_loading(self, mock_connect, mock_vector_index, mock_pg_store):
         # Test the JSON path specifically
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
