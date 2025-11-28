@@ -13,3 +13,5 @@ pgvector
 celery
 redis
 llama-parse
+pydantic
+pymupdf
