@@ -1,16 +1,32 @@
 site_name: ESL RAG Backend
+repo_url: https://github.com/your-org/esl-rag-backend
+edit_uri: edit/main/docs/
+
 theme:
   name: material
 
 plugins:
+  - search
   - mkdocstrings:
       handlers:
         python:
           paths: [.]
 
+markdown_extensions:
+  - admonition
+  - codehilite
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+
 nav:
-  - Home: index.md
-  - Architecture: architecture.md
-  - API Reference: api_reference.md
-  - RAG Concepts: rag_concepts.md
-  - User Manual: user_manual.md
+  - Overview:
+      - Home: index.md
+      - Architecture: architecture.md
+  - Reference:
+      - API Reference: api_reference.md
+      - RAG Concepts: rag_concepts.md
+  - Guides:
+      - User Manual: user_manual.md
+      - Database Fundamentals: data_base_fundamentals.md
