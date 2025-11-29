@@ -20,17 +20,17 @@ class SearchService:
     def __init__(self, index: VectorStoreIndex):
         self.index = index
 
-    def search_lessons_and_vocab(
+    def search_content(
         self,
         query: str,
-        top_lessons: int = 5,
-        top_vocab: int = 5,
+        limit: int = 10,
         max_unit: int | None = None,
         max_sequence_index: int | None = None,
         book_id: str | None = None,
     ) -> SearchResponse:
         """
         Searches for content atoms using LlamaIndex with optional Curriculum Guard.
+        Returns generic AtomHit objects.
         """
 
         # Build Filters
@@ -55,7 +55,7 @@ class SearchService:
                 )
             )
 
-        # Legacy Unit Filter
+        # Legacy Unit Filter (Generalized to work for any domain using 'unit')
         if max_unit is not None:
              filters_list.append(
                 MetadataFilter(
@@ -69,15 +69,13 @@ class SearchService:
         if filters_list:
             filters = MetadataFilters(filters=filters_list)
 
-        # Execute Retrieval (Single Call)
+        # Execute Retrieval
         retriever = self.index.as_retriever(
-            similarity_top_k=top_lessons + top_vocab,
+            similarity_top_k=limit,
             filters=filters
         )
         nodes = retriever.retrieve(query)
 
-        lessons: List[LessonHit] = []
-        vocab: List[VocabHit] = []
         atoms: List[AtomHit] = []
 
         # Map results
@@ -95,37 +93,9 @@ class SearchService:
             )
             atoms.append(atom_hit)
 
-            # Legacy Mapping for specific ESL use-cases (if needed by frontend)
-            atom_type = meta.get("atom_type", "text")
-
-            hit_id = 0
-            try:
-                 hit_id = int(hash(meta.get("node_id", str(node.node_id))) % 1000000)
-            except:
-                 pass
-
-            if atom_type == "vocab":
-                 vocab.append(VocabHit(
-                     id=hit_id,
-                     term=content.split("|")[0],
-                     lesson_code=str(meta.get("lesson", "")),
-                     unit=int(meta.get("unit", 0)) if meta.get("unit") else None,
-                     score=score,
-                     content=content
-                 ))
-            else:
-                 lessons.append(LessonHit(
-                     id=hit_id,
-                     lesson_code=str(meta.get("lesson", "Unknown")),
-                     title=str(meta.get("title", "Content Segment")),
-                     unit=int(meta.get("unit", 0)) if meta.get("unit") else None,
-                     score=score,
-                     content=content
-                 ))
-
         return SearchResponse(
-            lessons=lessons[:top_lessons],
-            vocab=vocab[:top_vocab],
+            lessons=[], # Legacy support: return empty
+            vocab=[],   # Legacy support: return empty
             atoms=atoms
         )
 
@@ -143,8 +113,7 @@ def get_search_service() -> SearchService:
         embed_dim=1536
     )
 
-    # Check if we should use mock embeddings (mostly for testing without API keys)
-    # In production, we assume OpenAI key is present.
+    # Check if we should use mock embeddings
     if os.getenv("USE_MOCK_EMBEDDING", "False").lower() == "true":
          embed_model = MockEmbedding(embed_dim=1536)
     else:

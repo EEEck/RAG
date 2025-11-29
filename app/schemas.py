@@ -72,6 +72,7 @@ class GenerateItemsRequest(BaseModel):
     item_types: List[str] = ["mcq", "cloze"]
     difficulty: str = "B1"
     context_text: Optional[str] = None # Added for RAG context
+    category: str = "language"
 
 
 class GeneratedItem(BaseModel):
