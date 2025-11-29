@@ -9,23 +9,25 @@ import json
 sys.path.append(os.path.abspath("."))
 
 from ingest.pipeline import run_ingestion
-from ingest import db
 from ingest.models import StructureNode, ContentAtom
 from ingest.schemas import LanguageMetadata
 from llama_index.core.schema import TextNode
+from ingest.infra.postgres import PostgresStructureNodeRepository
 
 class TestIngestionPipeline(unittest.TestCase):
 
     @patch("ingest.pipeline.PGVectorStore")
     @patch("ingest.pipeline.VectorStoreIndex")
-    @patch("ingest.db.psycopg.connect")
-    @patch("ingest.hybrid_ingestor.HybridIngestor.ingest_book")
-    def test_run_ingestion_flow(self, mock_ingest_book, mock_connect, mock_vector_index, mock_pg_store):
+    @patch("ingest.infra.postgres.psycopg.connect")
+    def test_run_ingestion_flow(self, mock_connect, mock_vector_index, mock_pg_store):
         # Setup Mock DB
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
+
         mock_connect.return_value = mock_conn
+        mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
 
         # Setup Mock Ingestion Result
         book_id = uuid.uuid4()
@@ -47,14 +49,16 @@ class TestIngestionPipeline(unittest.TestCase):
             ContentAtom(id=uuid.uuid4(), book_id=book_id, node_id=node_id, atom_type="text", content_text="Hello World", meta_data=metadata)
         ]
 
-        mock_ingest_book.return_value = (mock_nodes, mock_atoms)
+        # Create a Mock Ingestor directly
+        mock_ingestor = MagicMock()
+        mock_ingestor.ingest_book.return_value = (mock_nodes, mock_atoms)
 
         # Mock VectorStore and Index
         mock_store_instance = MagicMock()
         mock_pg_store.from_params.return_value = mock_store_instance
 
-        # Run Pipeline
-        run_ingestion("dummy.pdf", book_id=book_id, should_mock_embedding=True)
+        # Run Pipeline with injected ingestor
+        run_ingestion("dummy.pdf", book_id=book_id, should_mock_embedding=True, ingestor=mock_ingestor)
 
         # Assertions
 
@@ -62,11 +66,8 @@ class TestIngestionPipeline(unittest.TestCase):
         mock_connect.assert_called()
 
         # 2. Check Insertions
-        # We expect executemany to be called ONCE (structure nodes only)
-        # Note: ensure_schema calls execute, but not executemany
-        self.assertEqual(mock_cursor.executemany.call_count, 1)
-
         # Verify Node Insert
+        self.assertEqual(mock_cursor.executemany.call_count, 1)
         args_nodes = mock_cursor.executemany.call_args_list[0]
         sql_nodes = args_nodes[0][0]
         self.assertIn("INSERT INTO structure_nodes", sql_nodes)
@@ -86,14 +87,30 @@ class TestIngestionPipeline(unittest.TestCase):
 
     @patch("ingest.pipeline.PGVectorStore")
     @patch("ingest.pipeline.VectorStoreIndex")
-    @patch("ingest.db.psycopg.connect")
+    @patch("ingest.infra.postgres.psycopg.connect")
     @patch("ingest.classification.detect_book_category")
     def test_json_loading(self, mock_detect, mock_connect, mock_vector_index, mock_pg_store):
         # Test the JSON path specifically
         mock_conn = MagicMock()
+        mock_cursor = MagicMock()
         mock_connect.return_value = mock_conn
 
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+        mock_cursor.__enter__.return_value = mock_cursor
+
         mock_detect.return_value = "language"
+
+        # Setup mock nodes/atoms for JSON path
+        book_id = uuid.uuid4()
+        node_id = uuid.uuid4()
+        mock_nodes = [StructureNode(id=node_id, book_id=book_id, parent_id=None, node_level=0, title="Test", sequence_index=0, meta_data={})]
+        mock_atoms = []
+
+        # Create a Mock Ingestor
+        mock_ingestor = MagicMock()
+        # The pipeline calls _parse_docling_structure for JSON
+        mock_ingestor._parse_docling_structure.return_value = (mock_nodes, mock_atoms)
 
         # We need a real temporary JSON file
         data = {
@@ -106,8 +123,10 @@ class TestIngestionPipeline(unittest.TestCase):
             json.dump(data, f)
 
         try:
-            run_ingestion("temp_test.json", should_mock_embedding=True)
-            # If no exception, it passed the loading phase
+            run_ingestion("temp_test.json", should_mock_embedding=True, ingestor=mock_ingestor)
+
+            # Verify usage
+            mock_ingestor._parse_docling_structure.assert_called()
         finally:
             if os.path.exists("temp_test.json"):
                 os.remove("temp_test.json")

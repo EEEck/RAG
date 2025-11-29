@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
-from .services.search import search_lessons_and_vocab
+from .services.search_service import get_search_service
 from .services.generation import generate_items
 from .schemas import GenerateItemsRequest, ConceptPack, GenerateItemsResponse
 
@@ -16,8 +16,10 @@ def retrieve_and_generate(book_id: str, unit: int, topic: str) -> GenerateItemsR
     """
 
     # 1. Search (Retrieval)
+    search_service = get_search_service()
+
     # Returns SearchResponse object
-    search_response = search_lessons_and_vocab(
+    search_response = search_service.search_lessons_and_vocab(
         query=topic,
         top_lessons=5,
         top_vocab=5,

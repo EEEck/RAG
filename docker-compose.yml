@@ -49,15 +49,5 @@ services:
       - redis
       - db
 
-  docs:
-    image: squidfunk/mkdocs-material
-    container_name: rag_docs
-    working_dir: /docs
-    volumes:
-      - .:/docs
-    command: ["mkdocs", "serve", "-a", "0.0.0.0:8001"]
-    ports:
-      - "8001:8001"
-
 volumes:
   pgdata:
