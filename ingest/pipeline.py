@@ -145,7 +145,7 @@ def run_ingestion(
              sample_text = "\n".join([t.get("text", "") for t in texts[:5]])
              category = detect_book_category(os.path.basename(file_path), sample_text)
 
-        nodes, atoms = ingestor._parse_docling_structure(data, book_id, category)
+        nodes, atoms = ingestor._parse_docling_structure(data, book_id, file_path, category)
     else:
         nodes, atoms = ingestor.ingest_book(str(file_path), book_id, category)
 
