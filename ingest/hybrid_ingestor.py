@@ -253,7 +253,7 @@ class HybridIngestor:
 
         return nodes, atoms
 
-    def _parse_docling_structure(self, data: Dict, book_id: uuid.UUID, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def _parse_docling_structure(self, data: Dict, book_id: uuid.UUID, file_path: str, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Converts raw Docling JSON output into internal StructureNode and ContentAtom objects.
         """
@@ -370,18 +370,36 @@ class HybridIngestor:
             # or we could attach to root. For now, last_node_id gives proximity to text.
 
             for p in prov:
+                # Instantiate proper metadata for image
+                if category == "stem":
+                    meta = STEMMetadata(
+                        book_id=str(book_id),
+                        page_number=p.get("page_no", 1),
+                        content_type="image",
+                        unit_number=0
+                    )
+                elif category == "history":
+                    meta = HistoryMetadata(
+                        book_id=str(book_id),
+                        page_number=p.get("page_no", 1),
+                        content_type="image",
+                        unit_number=0
+                    )
+                else:
+                    meta = LanguageMetadata(
+                        book_id=str(book_id),
+                        page_number=p.get("page_no", 1),
+                        content_type="image",
+                        unit_number=0
+                    )
+
                 atom = ContentAtom(
                     id=uuid.uuid4(),
                     book_id=book_id,
                     node_id=last_node_id, # Attach to current section
                     atom_type="image_asset",
                     content_text="Image Reference",
-                    meta_data={
-                        "bbox": p.get("bbox"),
-                        "page": p.get("page_no"),
-                        "file_path": file_path,
-                        "source_type": "docling_picture"
-                    }
+                    meta_data=meta
                 )
                 atoms.append(atom)
 
