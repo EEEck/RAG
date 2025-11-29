@@ -17,12 +17,17 @@ from . import db
 from app.config import get_settings
 from .classification import detect_book_category
 
-def index_atoms_to_postgres(atoms: List[ContentAtom], should_mock_embedding: bool = False):
+def index_atoms_to_postgres(
+    atoms: List[ContentAtom],
+    sequence_map: Optional[dict] = None,
+    should_mock_embedding: bool = False
+):
     """
     Converts ContentAtoms to LlamaIndex TextNodes and persists them to Postgres via PGVectorStore.
 
     Args:
         atoms (List[ContentAtom]): List of content atoms to be indexed.
+        sequence_map (Optional[dict]): Map of node_id -> sequence_index to enrich metadata.
         should_mock_embedding (bool): If True, uses a mock embedding model (for testing).
                                       Defaults to False (uses OpenAI).
     """
@@ -46,6 +51,11 @@ def index_atoms_to_postgres(atoms: List[ContentAtom], should_mock_embedding: boo
             "atom_type": atom.atom_type,
             **meta_dict
         }
+
+        # Inject sequence_index if available
+        # Ensure robust key matching by casting to string, as IDs might be UUID objects or strings
+        if sequence_map and str(atom.node_id) in sequence_map:
+            metadata["sequence_index"] = sequence_map[str(atom.node_id)]
 
         # Create a LlamaIndex TextNode
         node = TextNode(
@@ -159,7 +169,10 @@ def run_ingestion(
 
     # 3. Enrich & Persist Content Atoms (LlamaIndex)
     try:
-        index_atoms_to_postgres(atoms, should_mock_embedding)
+        # Create a map of node_id -> sequence_index
+        # Use str(id) to ensure consistency between UUID objects and potential string representations
+        sequence_map = {str(n.id): n.sequence_index for n in nodes}
+        index_atoms_to_postgres(atoms, sequence_map=sequence_map, should_mock_embedding=should_mock_embedding)
     except Exception as e:
         print(f"Error during LlamaIndex indexing: {e}")
         raise
