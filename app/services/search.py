@@ -13,23 +13,39 @@ from ..schemas import LessonHit, VocabHit, AtomHit, SearchResponse
 
 # Singleton index to avoid reconnection churn
 _VECTOR_INDEX_SINGLETON = None
+_VECTOR_STORE_OVERRIDE = None  # Hook for testing
+
+def set_vector_store_override(store: Any) -> None:
+    """Sets a global override for the vector store (used for testing)."""
+    global _VECTOR_STORE_OVERRIDE, _VECTOR_INDEX_SINGLETON
+    _VECTOR_STORE_OVERRIDE = store
+    _VECTOR_INDEX_SINGLETON = None  # Reset singleton to ensure rebuild
+
+def set_index_override(index: VectorStoreIndex) -> None:
+    """Sets a global override for the entire VectorStoreIndex (used for testing)."""
+    global _VECTOR_INDEX_SINGLETON
+    _VECTOR_INDEX_SINGLETON = index
 
 def _get_vector_index() -> VectorStoreIndex:
-    """Initializes and returns the singleton VectorStoreIndex backed by Postgres."""
+    """Initializes and returns the singleton VectorStoreIndex."""
     global _VECTOR_INDEX_SINGLETON
     if _VECTOR_INDEX_SINGLETON is not None:
         return _VECTOR_INDEX_SINGLETON
 
     # Setup Vector Store
-    vector_store = PGVectorStore.from_params(
-        database=os.getenv("POSTGRES_DB", "rag"),
-        host=os.getenv("POSTGRES_HOST", "localhost"),
-        password=os.getenv("POSTGRES_PASSWORD", "rag"),
-        port=int(os.getenv("POSTGRES_PORT", 5432)),
-        user=os.getenv("POSTGRES_USER", "rag"),
-        table_name="content_atoms",
-        embed_dim=1536
-    )
+    if _VECTOR_STORE_OVERRIDE:
+        vector_store = _VECTOR_STORE_OVERRIDE
+    else:
+        # Default to Postgres
+        vector_store = PGVectorStore.from_params(
+            database=os.getenv("POSTGRES_DB", "rag"),
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            password=os.getenv("POSTGRES_PASSWORD", "rag"),
+            port=int(os.getenv("POSTGRES_PORT", 5432)),
+            user=os.getenv("POSTGRES_USER", "rag"),
+            table_name="content_atoms",
+            embed_dim=1536
+        )
 
     # Check if we should use mock embeddings (mostly for testing without API keys)
     # In production, we assume OpenAI key is present.

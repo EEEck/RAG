@@ -1,7 +1,7 @@
 import uuid
 import os
 import random
-from typing import List, Optional
+from typing import List, Optional, Any
 from pathlib import Path
 import json
 
@@ -11,29 +11,37 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.core.embeddings import MockEmbedding
 
-from .hybrid_ingestor import HybridIngestor
 from .models import StructureNode, ContentAtom
 from . import db
 from app.config import get_settings
 from .classification import detect_book_category
 
-def index_atoms_to_postgres(
+def index_atoms(
     atoms: List[ContentAtom],
     sequence_map: Optional[dict] = None,
-    should_mock_embedding: bool = False
-):
+    should_mock_embedding: bool = False,
+    vector_store: Optional[Any] = None,
+    storage_context: Optional[StorageContext] = None
+) -> VectorStoreIndex:
     """
-    Converts ContentAtoms to LlamaIndex TextNodes and persists them to Postgres via PGVectorStore.
+    Converts ContentAtoms to LlamaIndex TextNodes and persists them to the VectorStore.
 
     Args:
         atoms (List[ContentAtom]): List of content atoms to be indexed.
         sequence_map (Optional[dict]): Map of node_id -> sequence_index to enrich metadata.
         should_mock_embedding (bool): If True, uses a mock embedding model (for testing).
                                       Defaults to False (uses OpenAI).
+        vector_store (Optional[Any]): The vector store instance to use.
+                                      If None, defaults to PGVectorStore (production).
+        storage_context (Optional[StorageContext]): The storage context to use.
+                                                    If None, creates one from defaults.
+
+    Returns:
+        VectorStoreIndex: The created or updated index.
     """
     if not atoms:
         print("No atoms to index.")
-        return
+        return None
 
     print("Converting atoms to LlamaIndex Nodes...")
     nodes = []
@@ -60,25 +68,29 @@ def index_atoms_to_postgres(
         # Create a LlamaIndex TextNode
         node = TextNode(
             text=atom.content_text,
-            metadata=metadata
+            metadata=metadata,
+            id_=str(atom.id) # Ensure atom ID is preserved as node ID
         )
         nodes.append(node)
 
-    print(f"Created {len(nodes)} nodes. Connecting to Postgres (LlamaIndex)...")
+    print(f"Created {len(nodes)} nodes. Connecting to Vector Store...")
 
-    # Setup Vector Store
-    # Uses environment variables for connection or defaults, matching db.py
-    vector_store = PGVectorStore.from_params(
-        database=os.getenv("POSTGRES_DB", "rag"),
-        host=os.getenv("POSTGRES_HOST", "localhost"),
-        password=os.getenv("POSTGRES_PASSWORD", "rag"),
-        port=int(os.getenv("POSTGRES_PORT", 5432)),
-        user=os.getenv("POSTGRES_USER", "rag"),
-        table_name="content_atoms",
-        embed_dim=1536
-    )
+    # Setup Vector Store if not provided
+    if vector_store is None and storage_context is None:
+        # Default to Postgres (Production)
+        vector_store = PGVectorStore.from_params(
+            database=os.getenv("POSTGRES_DB", "rag"),
+            host=os.getenv("POSTGRES_HOST", "localhost"),
+            password=os.getenv("POSTGRES_PASSWORD", "rag"),
+            port=int(os.getenv("POSTGRES_PORT", 5432)),
+            user=os.getenv("POSTGRES_USER", "rag"),
+            table_name="content_atoms",
+            embed_dim=1536
+        )
 
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    # Use provided storage_context or create new one
+    if storage_context is None:
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
     # Setup Embedding Model
     if should_mock_embedding:
@@ -91,37 +103,44 @@ def index_atoms_to_postgres(
             api_key=os.getenv("OPENAI_API_KEY")
         )
 
-    # Build Index (This pushes to DB)
-    VectorStoreIndex(
+    # Build Index (This pushes to DB/StorageContext)
+    index = VectorStoreIndex(
         nodes,
         storage_context=storage_context,
         embed_model=embed_model
     )
-    print("Success! Atoms Indexed into Postgres.")
+    print("Success! Atoms Indexed into Vector Store.")
+    return index
 
 def run_ingestion(
     file_path: str,
     book_id: Optional[uuid.UUID] = None,
     should_mock_embedding: bool = False,
-    category: Optional[str] = None
+    category: Optional[str] = None,
+    db_mode: str = "postgres",
+    vector_store: Optional[Any] = None,
+    storage_context: Optional[StorageContext] = None
 ) -> None:
     """
     Runs the full ingestion pipeline for a given document.
 
-    This process involves:
-    1. Parsing the document using `HybridIngestor`.
-    2. Persisting structure nodes to the Relational DB.
-    3. Generating embeddings and persisting content atoms to the Vector DB.
-
     Args:
-        file_path (str): Path to the source file (PDF, JSON, etc.).
-        book_id (Optional[uuid.UUID]): Unique identifier for the book. Generated if not provided.
-        should_mock_embedding (bool): Whether to use mock embeddings. Defaults to False.
-        category (Optional[str]): Book category ('language', 'stem', 'history'). Detected if None.
-
-    Raises:
-        Exception: If any step of the ingestion process fails.
+        file_path (str): Path to the source file.
+        book_id (Optional[uuid.UUID]): Unique identifier for the book.
+        should_mock_embedding (bool): Whether to use mock embeddings.
+        category (Optional[str]): Book category.
+        db_mode (str): Database mode ("postgres" or "sqlite").
+        vector_store (Optional[Any]): Custom vector store instance.
+        storage_context (Optional[StorageContext]): Custom storage context.
     """
+    # Import HybridIngestor locally to avoid top-level import errors if docling is missing
+    try:
+        from .hybrid_ingestor import HybridIngestor
+    except ImportError as e:
+        print(f"Error importing HybridIngestor: {e}")
+        print("Ingestion cannot proceed without docling.")
+        return
+
     if book_id is None:
         book_id = uuid.uuid4()
 
@@ -137,9 +156,7 @@ def run_ingestion(
         print("Detected JSON input. Loading directly...")
         with open(file_path, "r") as f:
             data = json.load(f)
-        # Assuming JSON input is Docling format for now
-        # We need detection here too? Or passed?
-        # If category is missing, we can't easily detect from JSON dict without scanning text
+
         if category is None:
              texts = data.get("texts", [])
              sample_text = "\n".join([t.get("text", "") for t in texts[:5]])
@@ -152,43 +169,50 @@ def run_ingestion(
     print(f"Parsed {len(nodes)} structure nodes and {len(atoms)} content atoms.")
 
     # 2. Persist Structure Nodes (Manual DB)
-    print("Connecting to DB for structure nodes...")
-    conn = db.get_db_connection()
+    print(f"Connecting to DB ({db_mode}) for structure nodes...")
+
+    conn = db.get_db_connection(mode=db_mode)
+
     try:
-        # Ensure schema exists (creates structure_nodes table if missing)
+        # Ensure schema exists
         db.ensure_schema(conn)
 
         print("Inserting structure nodes...")
         db.insert_structure_nodes(conn, nodes)
     except Exception as e:
         print(f"Error during structure node insertion: {e}")
-        conn.rollback()
+        if hasattr(conn, 'rollback'):
+            conn.rollback()
         raise
     finally:
         conn.close()
 
-    # 3. Enrich & Persist Content Atoms (LlamaIndex)
+    # 3. Enrich & Persist Content Atoms (Vector Store)
     try:
-        # Create a map of node_id -> sequence_index
-        # Use str(id) to ensure consistency between UUID objects and potential string representations
         sequence_map = {str(n.id): n.sequence_index for n in nodes}
-        index_atoms_to_postgres(atoms, sequence_map=sequence_map, should_mock_embedding=should_mock_embedding)
+        index_atoms(
+            atoms,
+            sequence_map=sequence_map,
+            should_mock_embedding=should_mock_embedding,
+            vector_store=vector_store,
+            storage_context=storage_context
+        )
     except Exception as e:
-        print(f"Error during LlamaIndex indexing: {e}")
+        print(f"Error during Vector Index indexing: {e}")
         raise
 
-    # 4. Trigger Async Vision Enrichment
-    try:
-        # Import here to avoid top-level circular dependencies
-        from app.celery_worker import enrich_images_task
-        print("Triggering vision enrichment task...")
-        # Trigger task asynchronously. It will scan for pending images (including the ones just added).
-        enrich_images_task.delay(batch_size=50)
-    except ImportError:
-        print("Warning: app.celery_worker not found. Vision enrichment skipped (async).")
-    except Exception as e:
-        # We don't want to fail the whole ingestion if the async trigger fails (e.g., Redis down)
-        print(f"Warning: Failed to trigger vision enrichment: {e}")
+    # 4. Trigger Async Vision Enrichment (Only for Postgres/Prod usually)
+    if db_mode == "postgres":
+        try:
+            from app.celery_worker import enrich_images_task
+            print("Triggering vision enrichment task...")
+            enrich_images_task.delay(batch_size=50)
+        except ImportError:
+            print("Warning: app.celery_worker not found. Vision enrichment skipped (async).")
+        except Exception as e:
+            print(f"Warning: Failed to trigger vision enrichment: {e}")
+    else:
+        print("Skipping async vision enrichment in non-postgres mode.")
 
     print("Ingestion complete.")
 
