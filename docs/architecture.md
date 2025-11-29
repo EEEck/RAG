@@ -11,18 +11,31 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
     *   Handles request validation and orchestrates async tasks via Celery.
 
 2.  **Ingestion Engine (`ingest/`)**:
-    *   **Hybrid Ingestor**: Combines local `Docling` parsing with fallback to `LlamaParse` (Cloud) and `OpenAI VLM` (Vision Language Model) for complex or handwritten content.
+    *   **Hybrid Ingestor**:
+        *   **Primary**: `Docling` (Local) for fast, structured parsing.
+        *   **Fallback**: `LlamaParse` (Cloud) for complex layouts.
+        *   **Vision/Handwriting**: `OpenAI VLM` (GPT-4o) for handwritten notes or complex diagrams.
+        *   **Book Categorization**: Auto-detects `Language`, `STEM`, or `History` categories to enforce specific Pydantic metadata schemas.
     *   **Structure Nodes**: Maintains the hierarchical structure of books (Units, Lessons) in a relational format.
     *   **Content Atoms**: Granular chunks of text/images stored with vector embeddings for semantic search.
 
-3.  **Data Storage**:
+3.  **Vision Enrichment Engine**:
+    *   **Async Processing**: Decouples image description from initial ingestion.
+    *   **Flow**:
+        1. Ingestion creates `image_asset` atoms (raw image references).
+        2. Celery worker (`enrich_images_task`) picks up pending images.
+        3. `VisionEnricher` sends images to GPT-4o for detailed educational descriptions.
+        4. Descriptions are saved as `image_desc` atoms, linked to the original image, enabling semantic search over visual content.
+
+4.  **Curriculum Guard**:
+    *   **Logic**: Propagates `sequence_index` from the relational hierarchy (`structure_nodes`) to vector metadata (`content_atoms`).
+    *   **Enforcement**: Allows the search API to restrict results to content "learned so far" using LlamaIndex `MetadataFilters` (LTE - Less Than or Equal), preventing future concepts from leaking into current answers.
+
+5.  **Data Storage**:
     *   **PostgreSQL**:
         *   `structure_nodes` table: Stores hierarchy.
-        *   `content_atoms` table: Stores text chunks and vectors (via `pgvector`).
+        *   `content_atoms` table: Stores text/image chunks and vectors (via `pgvector`).
     *   **Redis**: Used as the message broker for Celery and result backend for async jobs.
-
-4.  **Celery Workers**:
-    *   Handle long-running tasks like Quiz Generation to keep the API responsive.
 
 ---
 

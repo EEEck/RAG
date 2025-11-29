@@ -177,6 +177,19 @@ def run_ingestion(
         print(f"Error during LlamaIndex indexing: {e}")
         raise
 
+    # 4. Trigger Async Vision Enrichment
+    try:
+        # Import here to avoid top-level circular dependencies
+        from app.celery_worker import enrich_images_task
+        print("Triggering vision enrichment task...")
+        # Trigger task asynchronously. It will scan for pending images (including the ones just added).
+        enrich_images_task.delay(batch_size=50)
+    except ImportError:
+        print("Warning: app.celery_worker not found. Vision enrichment skipped (async).")
+    except Exception as e:
+        # We don't want to fail the whole ingestion if the async trigger fails (e.g., Redis down)
+        print(f"Warning: Failed to trigger vision enrichment: {e}")
+
     print("Ingestion complete.")
 
 if __name__ == "__main__":
