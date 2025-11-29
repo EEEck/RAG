@@ -10,6 +10,7 @@ class SearchRequest(BaseModel):
     top_lessons: int = 5
     top_vocab: int = 5
     max_unit: Optional[int] = None
+    max_sequence_index: Optional[int] = None
 
 
 class LessonHit(BaseModel):

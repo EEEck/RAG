@@ -16,5 +16,6 @@ def search(req: SearchRequest) -> SearchResponse:
         top_lessons=req.top_lessons,
         top_vocab=req.top_vocab,
         max_unit=req.max_unit,
+        max_sequence_index=req.max_sequence_index,
     )
     return SearchResponse(lessons=lessons, vocab=vocab)
