@@ -78,7 +78,7 @@ class HybridIngestor:
                  print("Docling result poor or handwritten script suspected. Falling back to OpenAI VLM...")
                  return self.ingest_with_openai(file_path, book_id, category)
 
-            return self._parse_docling_structure(data, book_id, category)
+            return self._parse_docling_structure(data, book_id, file_path, category)
 
         except Exception as e:
             print(f"Docling failed: {e}. Attempting OpenAI VLM fallback...")
@@ -355,6 +355,33 @@ class HybridIngestor:
                     atom_type="text",
                     content_text=text,
                     meta_data=meta
+                )
+                atoms.append(atom)
+
+        # Process Images
+        for item in data.get("pictures", []):
+            prov = item.get("prov", [])
+            # Skip if no provenance or bbox
+            if not prov:
+                continue
+
+            # Assuming the image is associated with the last known node or root
+            # Docling structure might link images to headers but here we just attach to last_node_id for context
+            # or we could attach to root. For now, last_node_id gives proximity to text.
+
+            for p in prov:
+                atom = ContentAtom(
+                    id=uuid.uuid4(),
+                    book_id=book_id,
+                    node_id=last_node_id, # Attach to current section
+                    atom_type="image_asset",
+                    content_text="Image Reference",
+                    meta_data={
+                        "bbox": p.get("bbox"),
+                        "page": p.get("page_no"),
+                        "file_path": file_path,
+                        "source_type": "docling_picture"
+                    }
                 )
                 atoms.append(atom)
 
