@@ -3,16 +3,18 @@ import os
 import json
 import pytest
 from uuid import UUID
-import sqlite3
+from unittest.mock import patch, MagicMock
 from typing import Any
 
 from ingest.models import ContentAtom, StructureNode
 from ingest.schemas import LanguageMetadata
-from ingest import db, pipeline
+from ingest import pipeline
 from app.services.search import search_lessons_and_vocab, set_index_override
 
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.vector_stores import SimpleVectorStore
+
+from tests.integration import mock_db
 
 # Hardcoded Test Data (from original integration_rag.py)
 DATA_NODES = [StructureNode(id=UUID('00ffc99b-5c33-4ba6-ab84-b075146cd543'), book_id=UUID('4f10954b-c1cc-478a-952f-0bd2b954c672'), parent_id=None, node_level=0, title='Book Root', sequence_index=0, meta_data={}), StructureNode(id=UUID('84c4f19c-a53a-4903-a5e4-b83e369bc163'), book_id=UUID('4f10954b-c1cc-478a-952f-0bd2b954c672'), parent_id=UUID('00ffc99b-5c33-4ba6-ab84-b075146cd543'), node_level=1, title="Pick-up A We're from Greenwich", sequence_index=1, meta_data={'page_no': 1, 'bbox': {'l': 586.2127685546875, 't': 3877.1612955729165, 'r': 1995.5745442708333, 'b': 3548.9032389322915, 'coord_origin': 'BOTTOMLEFT'}, 'charspan': [0, 30]}), StructureNode(id=UUID('8f27bee1-60be-46a8-8cc2-ce04806a4242'), book_id=UUID('4f10954b-c1cc-478a-952f-0bd2b954c672'), parent_id=UUID('00ffc99b-5c33-4ba6-ab84-b075146cd543'), node_level=1, title='3 Characters', sequence_index=2, meta_data={'page_no': 1, 'bbox': {'l': 441.1914876302083, 't': 644.1292317708335, 'r': 906.8936360677084, 'b': 534.7096354166665, 'coord_origin': 'BOTTOMLEFT'}, 'charspan': [0, 12]}), StructureNode(id=UUID('33466cae-ff92-49f8-8d1b-cc067792f9a9'), book_id=UUID('4f10954b-c1cc-478a-952f-0bd2b954c672'), parent_id=UUID('00ffc99b-5c33-4ba6-ab84-b075146cd543'), node_level=1, title='Media skills', sequence_index=3, meta_data={'page_no': 2, 'bbox': {'l': 1830.1277669270833, 't': 712.2581380208335, 'r': 2126.2980143229165, 'b': 658.5807291666665, 'coord_origin': 'BOTTOMLEFT'}, 'charspan': [0, 12]})]
@@ -62,7 +64,7 @@ def storage_context():
 def test_pipeline_local_integration(sqlite_db_path, storage_context):
     """
     Integration test that:
-    1. Sets up a local SQLite DB.
+    1. Sets up a local SQLite DB (using mock_db).
     2. Sets up a local StorageContext (holding both vectors and text).
     3. Ingests structure nodes and content atoms (including a new mock one).
     4. Performs a RAG search using the Search Service.
@@ -76,32 +78,52 @@ def test_pipeline_local_integration(sqlite_db_path, storage_context):
     print(f"\nUsing SQLite DB at: {sqlite_db_path}")
 
     # 2. Persist Structure Nodes (SQLite)
-    conn = db.get_db_connection(mode="sqlite", db_path=sqlite_db_path)
-    try:
-        db.ensure_schema(conn)
-        db.insert_structure_nodes(conn, nodes)
+    # We use mock_db directly here to setup the test data initially?
+    # Or rely on run_ingestion?
+    # Let's rely on run_ingestion to do it via the patch.
+
+    # PATCH `ingest.db` with `mock_db` so pipeline uses SQLite
+    # We also need to ensure mock_db knows where the DB is.
+    # We can use functools.partial or just pass it in via kwargs if pipeline supported it,
+    # but since pipeline calls db.get_db_connection() without args, we need to inject the path.
+    # We can inject it into os.environ for the mock to pick up.
+
+    os.environ["TEST_SQLITE_DB_PATH"] = sqlite_db_path
+
+    # Patch the `ingest.pipeline.db` reference to point to our `mock_db`
+    with patch('ingest.pipeline.db', new=mock_db):
+
+        # 3. Index Atoms (using the persistent StorageContext)
+        # Create sequence map
+        sequence_map = {str(n.id): n.sequence_index for n in nodes}
+
+        # Run Indexing
+        # We call pipeline.index_atoms manually here to simulate the ingestion part that matters for RAG
+        # OR we could call run_ingestion if we mocked the parsing part.
+        # Given we have the objects already, we simulate the "Persist" steps of run_ingestion.
+
+        # Step 2 of pipeline: Persist Structure Nodes
+        conn = mock_db.get_db_connection() # Uses env var
+        mock_db.ensure_schema(conn)
+        mock_db.insert_structure_nodes(conn, nodes)
+        conn.close()
 
         # Verify Insertion
+        conn = mock_db.get_db_connection()
         cur = conn.cursor()
         cur.execute("SELECT count(*) FROM structure_nodes")
         count = cur.fetchone()[0]
+        conn.close()
         assert count == len(nodes), f"Expected {len(nodes)} nodes, found {count}"
 
-    finally:
-        conn.close()
-
-    # 3. Index Atoms (using the persistent StorageContext)
-    # Create sequence map
-    sequence_map = {str(n.id): n.sequence_index for n in nodes}
-
-    # Run Indexing
-    # This now returns the live Index object
-    index = pipeline.index_atoms(
-        atoms,
-        sequence_map=sequence_map,
-        should_mock_embedding=False, # Use Real OpenAI Embeddings
-        storage_context=storage_context
-    )
+        # Step 3 of pipeline: Index Atoms
+        # This now returns the live Index object
+        index = pipeline.index_atoms(
+            atoms,
+            sequence_map=sequence_map,
+            should_mock_embedding=False, # Use Real OpenAI Embeddings
+            storage_context=storage_context
+        )
 
     # 4. Setup Search Service Override
     # Pass the LIVE index object to the search service

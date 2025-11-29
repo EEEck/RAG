@@ -117,7 +117,6 @@ def run_ingestion(
     book_id: Optional[uuid.UUID] = None,
     should_mock_embedding: bool = False,
     category: Optional[str] = None,
-    db_mode: str = "postgres",
     vector_store: Optional[Any] = None,
     storage_context: Optional[StorageContext] = None
 ) -> None:
@@ -129,7 +128,6 @@ def run_ingestion(
         book_id (Optional[uuid.UUID]): Unique identifier for the book.
         should_mock_embedding (bool): Whether to use mock embeddings.
         category (Optional[str]): Book category.
-        db_mode (str): Database mode ("postgres" or "sqlite").
         vector_store (Optional[Any]): Custom vector store instance.
         storage_context (Optional[StorageContext]): Custom storage context.
     """
@@ -169,9 +167,9 @@ def run_ingestion(
     print(f"Parsed {len(nodes)} structure nodes and {len(atoms)} content atoms.")
 
     # 2. Persist Structure Nodes (Manual DB)
-    print(f"Connecting to DB ({db_mode}) for structure nodes...")
+    print("Connecting to DB for structure nodes...")
 
-    conn = db.get_db_connection(mode=db_mode)
+    conn = db.get_db_connection()
 
     try:
         # Ensure schema exists
@@ -202,7 +200,8 @@ def run_ingestion(
         raise
 
     # 4. Trigger Async Vision Enrichment (Only for Postgres/Prod usually)
-    if db_mode == "postgres":
+    # We can detect if we are in prod by checking if vector_store was passed
+    if vector_store is None:
         try:
             from app.celery_worker import enrich_images_task
             print("Triggering vision enrichment task...")
@@ -212,7 +211,7 @@ def run_ingestion(
         except Exception as e:
             print(f"Warning: Failed to trigger vision enrichment: {e}")
     else:
-        print("Skipping async vision enrichment in non-postgres mode.")
+        print("Skipping async vision enrichment (custom vector store detected).")
 
     print("Ingestion complete.")
 
