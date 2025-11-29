@@ -11,11 +11,12 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 @router.post("", response_model=SearchResponse)
 def search(req: SearchRequest) -> SearchResponse:
-    lessons, vocab = search_lessons_and_vocab(
+    # Service now returns SearchResponse object directly
+    response = search_lessons_and_vocab(
         query=req.query,
         top_lessons=req.top_lessons,
         top_vocab=req.top_vocab,
         max_unit=req.max_unit,
         max_sequence_index=req.max_sequence_index,
     )
-    return SearchResponse(lessons=lessons, vocab=vocab)
+    return response

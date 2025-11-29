@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
 
 from pydantic import BaseModel
 
@@ -13,12 +13,20 @@ class SearchRequest(BaseModel):
     max_sequence_index: Optional[int] = None
 
 
+class AtomHit(BaseModel):
+    id: str  # changed to str to accommodate UUID or hash
+    content: str
+    metadata: Dict[str, Any]
+    score: float
+
+
 class LessonHit(BaseModel):
     id: int
     lesson_code: str
     title: str
     unit: Optional[int]
     score: float
+    content: Optional[str] = None  # Added content field
 
 
 class VocabHit(BaseModel):
@@ -27,11 +35,13 @@ class VocabHit(BaseModel):
     lesson_code: Optional[str]
     unit: Optional[int]
     score: float
+    content: Optional[str] = None  # Added content field
 
 
 class SearchResponse(BaseModel):
     lessons: List[LessonHit]
     vocab: List[VocabHit]
+    atoms: Optional[List[AtomHit]] = None # Generic results
 
 
 class ConceptPack(BaseModel):
@@ -61,6 +71,7 @@ class GenerateItemsRequest(BaseModel):
     count: int = 10
     item_types: List[str] = ["mcq", "cloze"]
     difficulty: str = "B1"
+    context_text: Optional[str] = None # Added for RAG context
 
 
 class GeneratedItem(BaseModel):
