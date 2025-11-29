@@ -1,0 +1,73 @@
+import os
+import json
+import psycopg
+from typing import List
+from ..models import StructureNode
+from ..interfaces import StructureNodeRepository
+
+# Postgres Schema
+POSTGRES_SCHEMA_SQL = """
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 1. Structure Nodes
+CREATE TABLE IF NOT EXISTS structure_nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    book_id UUID NOT NULL,
+    parent_id UUID REFERENCES structure_nodes(id),
+    node_level INTEGER, -- 0=Book, 1=Unit, 2=Section
+    title TEXT,
+    sequence_index INTEGER,
+    meta_data JSONB
+);
+"""
+
+class PostgresStructureNodeRepository(StructureNodeRepository):
+    """Postgres implementation of StructureNodeRepository using psycopg."""
+
+    def __init__(self, host: str = None, dbname: str = None, user: str = None, password: str = None):
+        self.host = host or os.getenv("POSTGRES_HOST", "localhost")
+        self.dbname = dbname or os.getenv("POSTGRES_DB", "rag")
+        self.user = user or os.getenv("POSTGRES_USER", "rag")
+        self.password = password or os.getenv("POSTGRES_PASSWORD", "rag")
+
+    def get_connection(self) -> psycopg.Connection:
+        return psycopg.connect(
+            host=self.host,
+            dbname=self.dbname,
+            user=self.user,
+            password=self.password,
+            autocommit=False
+        )
+
+    def ensure_schema(self) -> None:
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(POSTGRES_SCHEMA_SQL)
+            conn.commit()
+
+    def insert_structure_nodes(self, nodes: List[StructureNode]) -> None:
+        if not nodes:
+            return
+
+        query = """
+        INSERT INTO structure_nodes (id, book_id, parent_id, node_level, title, sequence_index, meta_data)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (id) DO NOTHING;
+        """
+        data = [
+            (
+                n.id,
+                n.book_id,
+                n.parent_id,
+                n.node_level,
+                n.title,
+                n.sequence_index,
+                json.dumps(n.meta_data)
+            )
+            for n in nodes
+        ]
+
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.executemany(query, data)
+            conn.commit()
