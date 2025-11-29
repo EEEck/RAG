@@ -8,7 +8,7 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
 
 1.  **FastAPI Service (`app/`)**:
     *   Exposes endpoints for Search (`/search`), Concept Retrieval (`/concept`), and Quiz Generation (`/generate/quiz`).
-    *   Handles request validation and orchestrates async tasks via Celery.
+    *   **RAG Orchestrator**: Bridges the gap between retrieval and generation. It fetches context from the search service and injects it into the generation prompt.
 
 2.  **Ingestion Engine (`ingest/`)**:
     *   **Hybrid Ingestor**:
@@ -34,8 +34,25 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
 5.  **Data Storage**:
     *   **PostgreSQL**:
         *   `structure_nodes` table: Stores hierarchy.
+        *   `content_atoms` table: Stores text chunks and vectors (via `pgvector`) and JSONB metadata (`metadata_`).
         *   `content_atoms` table: Stores text/image chunks and vectors (via `pgvector`).
     *   **Redis**: Used as the message broker for Celery and result backend for async jobs.
+
+---
+
+## Retrieval & Generation (RAG) Flow
+
+1.  **Curriculum Guard (Filtering)**:
+    *   Queries are first filtered by `book_id` and strict curriculum boundaries (e.g., `sequence_index` or `unit`).
+    *   This is enforced using LlamaIndex `MetadataFilters`.
+    *   **Optimization**: A specific GIN Index on the `metadata_` column in Postgres is required to ensure these filters remain fast as the dataset grows.
+
+2.  **Vector Search**:
+    *   Within the filtered subset, `pgvector` retrieves the most semantically relevant "atoms" (text chunks).
+
+3.  **Context Injection**:
+    *   The `rag_engine` orchestrator concatenates these atoms into a source context.
+    *   The Generation Service (`generation.py`) instructs the LLM to use this provided context as the primary source material, ensuring the quiz/content is grounded in the textbook.
 
 ---
 
@@ -67,6 +84,7 @@ While 100s of users is not "web scale", providing low-latency semantic search ov
     *   Users typically query *specific* books (e.g., "Show me vocabulary from Book A").
     *   We leverage the `book_id` metadata column in `pgvector`.
     *   **Partitioning**: In a production Postgres setup, we would partition the `content_atoms` table by `book_id` (list partitioning) or hash partitioning. This allows the query planner to scan only the relevant partitions, drastically reducing search time compared to scanning a monolithic index of 1000 books.
+    *   **GIN Indexing**: As mentioned, the JSONB metadata column must be GIN-indexed to support rapid filtering on `book_id`, `unit`, and `sequence_index`.
 
 *   **Caching Strategy**:
     *   Implement **Redis Caching** for frequent queries. If multiple students in a class ask "What is the summary of Unit 1?", the embedding generation and DB lookup should only happen once.

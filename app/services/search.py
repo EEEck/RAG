@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any, Dict
 
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.vector_stores.postgres import PGVectorStore
@@ -9,7 +9,7 @@ from llama_index.core.embeddings import MockEmbedding
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.vector_stores.types import MetadataFilters, MetadataFilter, FilterOperator
 
-from ..schemas import LessonHit, VocabHit
+from ..schemas import LessonHit, VocabHit, AtomHit, SearchResponse
 
 # Singleton index to avoid reconnection churn
 _VECTOR_INDEX_SINGLETON = None
@@ -53,22 +53,26 @@ def search_lessons_and_vocab(
     top_vocab: int = 5,
     max_unit: int | None = None,
     max_sequence_index: int | None = None,
-) -> Tuple[List[LessonHit], List[VocabHit]]:
+    book_id: str | None = None,
+) -> SearchResponse:
     """
     Searches for content atoms using LlamaIndex with optional Curriculum Guard.
-
-    Args:
-        query (str): The search query.
-        top_lessons (int): Number of lesson results (not fully used in this atom-based retrieval yet).
-        top_vocab (int): Number of vocab results.
-        max_unit (int): Legacy filter (optional).
-        max_sequence_index (int): Curriculum Guard - strict upper bound on sequence_index.
+    Returns a SearchResponse object containing lessons, vocab, and generic atoms.
     """
 
     index = _get_vector_index()
 
     # Build Filters
     filters_list = []
+
+    if book_id:
+        filters_list.append(
+            MetadataFilter(
+                key="book_id",
+                value=book_id,
+                operator=FilterOperator.EQ
+            )
+        )
 
     # Curriculum Guard
     if max_sequence_index is not None:
@@ -80,14 +84,13 @@ def search_lessons_and_vocab(
             )
         )
 
-    # Legacy Unit Filter (if strictly required, though sequence_index is preferred)
+    # Legacy Unit Filter
     if max_unit is not None:
          filters_list.append(
             MetadataFilter(
                 key="unit",
                 value=max_unit,
-                operator=FilterOperator.LTE # Assuming unit is also sequential? Or EQ?
-                # Usually "max_unit" implies "up to unit X", so LTE makes sense if unit is an integer.
+                operator=FilterOperator.LTE
             )
         )
 
@@ -96,7 +99,6 @@ def search_lessons_and_vocab(
         filters = MetadataFilters(filters=filters_list)
 
     # Execute Retrieval (Single Call)
-    # If filters change per request, we should instantiate retriever here.
     retriever = index.as_retriever(
         similarity_top_k=top_lessons + top_vocab,
         filters=filters
@@ -105,46 +107,53 @@ def search_lessons_and_vocab(
 
     lessons: List[LessonHit] = []
     vocab: List[VocabHit] = []
+    atoms: List[AtomHit] = []
 
     # Map results
-    # ContentAtoms are granular. We need to map them to "LessonHit" or "VocabHit"
-    # This mapping is approximate since we moved to atomic storage.
-
     for node in nodes:
         meta = node.metadata
         score = node.score if node.score else 0.0
+        content = node.get_content()
 
-        # Determine if it's "vocab" or "lesson" content based on atom_type or metadata
+        # Generic Atom Hit
+        atom_hit = AtomHit(
+            id=str(node.node_id),
+            content=content,
+            metadata=meta,
+            score=score
+        )
+        atoms.append(atom_hit)
+
+        # Legacy Mapping for specific ESL use-cases (if needed by frontend)
         atom_type = meta.get("atom_type", "text")
 
-        # Placeholder ID generation/mapping
-        # In a real app, we'd look up the Lesson details from structure_nodes or similar.
-        # Here we just return the atom info.
-
-        hit_id = 0 # We don't have integer IDs for atoms readily available as primary keys here (UUIDs).
-        # Schema expects int id. We might need to hash the UUID or change schema.
-        # For now, using hash of node_id
+        hit_id = 0
         try:
-             hit_id = int(hash(meta.get("node_id", "")) % 1000000)
+             hit_id = int(hash(meta.get("node_id", str(node.node_id))) % 1000000)
         except:
              pass
 
         if atom_type == "vocab":
              vocab.append(VocabHit(
                  id=hit_id,
-                 term=node.get_content().split("|")[0], # Rough extraction
+                 term=content.split("|")[0],
                  lesson_code=str(meta.get("lesson", "")),
                  unit=int(meta.get("unit", 0)) if meta.get("unit") else None,
-                 score=score
+                 score=score,
+                 content=content
              ))
         else:
-            # Default to Lesson Hit
              lessons.append(LessonHit(
                  id=hit_id,
                  lesson_code=str(meta.get("lesson", "Unknown")),
                  title=str(meta.get("title", "Content Segment")),
                  unit=int(meta.get("unit", 0)) if meta.get("unit") else None,
-                 score=score
+                 score=score,
+                 content=content
              ))
 
-    return lessons[:top_lessons], vocab[:top_vocab]
+    return SearchResponse(
+        lessons=lessons[:top_lessons],
+        vocab=vocab[:top_vocab],
+        atoms=atoms
+    )
