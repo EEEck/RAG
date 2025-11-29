@@ -2,25 +2,28 @@ import asyncio
 import os
 import json
 import base64
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Type, Union, Literal
 from pydantic import BaseModel, Field
 import fitz  # PyMuPDF
 from openai import AsyncOpenAI
+from .schemas import LanguageMetadata, STEMMetadata, HistoryMetadata, BaseMetadata
 
 # --- Configuration ---
 MODEL_NAME = "gpt-4o"
 MAX_CONCURRENT_PAGES = 5
 
-# --- Data Models (Pydantic) ---
-class ContentAtomModel(BaseModel):
-    type: str = Field(..., description="Type of content: 'text', 'image_desc', 'vocab', 'grammar', 'equation'")
-    content: str = Field(..., description="The actual text content, image description, or latex equation")
-    meta_data: Optional[Dict] = Field(default={}, description="Extra info like {'speaker': 'Sherlock'} or {'word_class': 'noun'}")
+# --- Helper to create dynamic models ---
+def create_page_model(metadata_cls: Type[BaseMetadata]):
+    class SpecificAtomModel(BaseModel):
+        content: str = Field(..., description="The actual text content, image description, or latex equation")
+        meta_data: metadata_cls = Field(..., description="Domain specific metadata including content_type")
 
-class PageContentModel(BaseModel):
-    unit_number: Optional[int] = Field(None, description="The unit number this page belongs to, if apparent")
-    lesson_title: Optional[str] = Field(None, description="The title of the lesson or section, e.g. 'Station 1'")
-    atoms: List[ContentAtomModel] = Field(..., description="List of extracted content blocks")
+    class SpecificPageModel(BaseModel):
+        unit_number: Optional[int] = Field(None, description="The unit number this page belongs to")
+        lesson_title: Optional[str] = Field(None, description="The title of the lesson or section")
+        atoms: List[SpecificAtomModel] = Field(..., description="List of extracted content blocks")
+
+    return SpecificPageModel
 
 # --- The Ingestor Class ---
 class OpenAIIngestor:
@@ -36,19 +39,30 @@ class OpenAIIngestor:
         img_data = pix.tobytes("jpeg")
         return base64.b64encode(img_data).decode('utf-8')
 
-    async def process_page(self, page_num: int, b64_image: str) -> dict:
+    async def process_page(self, page_num: int, b64_image: str, category: str = "language") -> dict:
         """Sends one page image to OpenAI and requests structured JSON."""
 
-        prompt = """
-        You are an expert Educational Content Parser.
+        # Select Schema
+        if category == "stem":
+            metadata_cls = STEMMetadata
+        elif category == "history":
+            metadata_cls = HistoryMetadata
+        else:
+            metadata_cls = LanguageMetadata
+
+        PageModel = create_page_model(metadata_cls)
+
+        prompt = f"""
+        You are an expert Educational Content Parser for {category} textbooks.
         Analyze this textbook page image. Extract the content into a structured format.
 
         Guidelines:
         1. Identify the Unit Number and Lesson Title from headers.
-        2. Extract text blocks. If it's a dialogue, note the speaker in meta_data.
-        3. For images, write a detailed visual description in 'content' and set type to 'image_desc'.
-        4. For vocabulary lists, set type to 'vocab'.
-        5. Ignore page numbers, headers, and copyright text.
+        2. Extract text blocks.
+        3. Populate the 'meta_data' fields strictly according to the schema for {category}.
+           - content_type must be one of: "text", "image", "exercise", "table", "vocab", "image_desc", "grammar", "equation"
+        4. For images, write a detailed visual description in 'content' and set content_type to 'image_desc'.
+        5. Ignore page numbers, headers, and copyright text in the main content (but capture unit/title).
         """
 
         async with self.semaphore:
@@ -73,7 +87,7 @@ class OpenAIIngestor:
                             ]
                         }
                     ],
-                    response_format=PageContentModel
+                    response_format=PageModel
                 )
 
                 # The response is parsed into the Pydantic model
@@ -93,19 +107,19 @@ class OpenAIIngestor:
                     "error": str(e)
                 }
 
-    async def ingest_book(self, pdf_path: str):
+    async def ingest_book(self, pdf_path: str, category: str = "language"):
         """Main entry point to ingest a PDF."""
         print(f"Opening {pdf_path}...")
         doc = fitz.open(pdf_path)
         total_pages = len(doc)
-        print(f"Found {total_pages} pages. Starting ingestion with {MODEL_NAME}...")
+        print(f"Found {total_pages} pages. Starting ingestion with {MODEL_NAME} for category: {category}...")
 
         tasks = []
         for i in range(total_pages):
             # Prepare the image locally (fast)
             b64_img = self._pdf_page_to_base64_image(doc, i)
             # Schedule the API call
-            tasks.append(self.process_page(i, b64_img))
+            tasks.append(self.process_page(i, b64_img, category))
 
         # Run all tasks concurrently (controlled by semaphore)
         results = await asyncio.gather(*tasks)

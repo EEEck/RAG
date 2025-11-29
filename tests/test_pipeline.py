@@ -11,6 +11,7 @@ sys.path.append(os.path.abspath("."))
 from ingest.pipeline import run_ingestion
 from ingest import db
 from ingest.models import StructureNode, ContentAtom
+from ingest.schemas import LanguageMetadata
 from llama_index.core.schema import TextNode
 
 class TestIngestionPipeline(unittest.TestCase):
@@ -33,8 +34,17 @@ class TestIngestionPipeline(unittest.TestCase):
         mock_nodes = [
             StructureNode(id=node_id, book_id=book_id, parent_id=None, node_level=0, title="Test", sequence_index=0, meta_data={})
         ]
+
+        # FIX: Use valid Pydantic Metadata
+        metadata = LanguageMetadata(
+            book_id=str(book_id),
+            content_type="text",
+            unit_number=1,
+            page_number=1
+        )
+
         mock_atoms = [
-            ContentAtom(id=uuid.uuid4(), book_id=book_id, node_id=node_id, atom_type="text", content_text="Hello World", meta_data={})
+            ContentAtom(id=uuid.uuid4(), book_id=book_id, node_id=node_id, atom_type="text", content_text="Hello World", meta_data=metadata)
         ]
 
         mock_ingest_book.return_value = (mock_nodes, mock_atoms)
@@ -72,14 +82,18 @@ class TestIngestionPipeline(unittest.TestCase):
         self.assertIsInstance(passed_nodes[0], TextNode)
         self.assertEqual(passed_nodes[0].text, "Hello World")
         self.assertEqual(passed_nodes[0].metadata["book_id"], str(book_id))
+        self.assertEqual(passed_nodes[0].metadata["category"], "language") # Verified serialized field
 
     @patch("ingest.pipeline.PGVectorStore")
     @patch("ingest.pipeline.VectorStoreIndex")
     @patch("ingest.db.psycopg.connect")
-    def test_json_loading(self, mock_connect, mock_vector_index, mock_pg_store):
+    @patch("ingest.classification.detect_book_category")
+    def test_json_loading(self, mock_detect, mock_connect, mock_vector_index, mock_pg_store):
         # Test the JSON path specifically
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
+
+        mock_detect.return_value = "language"
 
         # We need a real temporary JSON file
         data = {

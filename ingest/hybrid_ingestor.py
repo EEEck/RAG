@@ -14,6 +14,8 @@ from docling.document_converter import DocumentConverter
 
 from .models import StructureNode, ContentAtom
 from .openai_ingestor import OpenAIIngestor
+from .schemas import LanguageMetadata, STEMMetadata, HistoryMetadata
+from .classification import detect_book_category
 
 class HybridIngestor:
     """
@@ -36,13 +38,14 @@ class HybridIngestor:
         else:
              self.openai_ingestor = None
 
-    def ingest_book(self, file_path: str, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def ingest_book(self, file_path: str, book_id: uuid.UUID, category: Optional[str] = None) -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Ingests a book from a given file path, attempting strategies in order.
 
         Args:
             file_path (str): The path to the document file.
             book_id (uuid.UUID): The unique identifier for the book.
+            category (Optional[str]): The book category ('language', 'stem', 'history'). Detected if None.
 
         Returns:
             Tuple[List[StructureNode], List[ContentAtom]]: A tuple containing a list of structure nodes and a list of content atoms.
@@ -53,24 +56,38 @@ class HybridIngestor:
             # Export to dict to analyze structure
             data = doc.document.export_to_dict()
 
+            # Auto-detect category if not provided
+            if category is None:
+                # Use first few text blocks to detect
+                texts = data.get("texts", [])
+                sample_text = "\n".join([t.get("text", "") for t in texts[:5]])
+                title = os.path.basename(file_path) # Fallback title
+                category = detect_book_category(title, sample_text)
+                print(f"Detected Category: {category}")
+
             if self._needs_fallback(data):
                 print("Complexity detected. Switching to LlamaParse...")
                 try:
-                    return self.ingest_with_llama(file_path, book_id)
+                    return self.ingest_with_llama(file_path, book_id, category)
                 except Exception as e:
                     print(f"LlamaParse failed: {e}. Falling back to OpenAI VLM...")
-                    return self.ingest_with_openai(file_path, book_id)
+                    return self.ingest_with_openai(file_path, book_id, category)
 
             # Check if Docling result is empty or poor quality which might indicate handwritten script
             if self._is_poor_quality_or_handwritten(data):
                  print("Docling result poor or handwritten script suspected. Falling back to OpenAI VLM...")
-                 return self.ingest_with_openai(file_path, book_id)
+                 return self.ingest_with_openai(file_path, book_id, category)
 
-            return self._parse_docling_structure(data, book_id)
+            return self._parse_docling_structure(data, book_id, category)
 
         except Exception as e:
             print(f"Docling failed: {e}. Attempting OpenAI VLM fallback...")
-            return self.ingest_with_openai(file_path, book_id)
+            # If Docling totally failed, we can't extract text for detection.
+            # Fallback to 'language' or try to detect from OpenAI first page?
+            # For now, default to language if not provided.
+            if category is None:
+                category = "language"
+            return self.ingest_with_openai(file_path, book_id, category)
 
     def _needs_fallback(self, data) -> bool:
         """
@@ -98,16 +115,9 @@ class HybridIngestor:
             return True
         return False
 
-    def ingest_with_llama(self, file_path: str, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def ingest_with_llama(self, file_path: str, book_id: uuid.UUID, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Ingests a book using LlamaParse (Cloud).
-
-        Args:
-            file_path (str): Path to the file.
-            book_id (uuid.UUID): Book ID.
-
-        Returns:
-            Tuple[List[StructureNode], List[ContentAtom]]: Parsed nodes and atoms.
         """
         if not self.llama:
             # Fallback if key missing: raise error to trigger next fallback
@@ -143,35 +153,35 @@ class HybridIngestor:
                 meta_data={"page": idx+1}
             ))
 
+            # Create Pydantic Metadata based on Category
+            if category == "stem":
+                meta = STEMMetadata(book_id=str(book_id), page_number=idx+1, content_type="text", unit_number=0)
+            elif category == "history":
+                meta = HistoryMetadata(book_id=str(book_id), page_number=idx+1, content_type="text", unit_number=0)
+            else:
+                meta = LanguageMetadata(book_id=str(book_id), page_number=idx+1, content_type="text", unit_number=0)
+
             atoms.append(ContentAtom(
                 id=uuid.uuid4(),
                 book_id=book_id,
                 node_id=node_id,
                 atom_type="complex_page",
                 content_text=d.text,
-                meta_data={}
+                meta_data=meta
             ))
 
         return nodes, atoms
 
-    def ingest_with_openai(self, file_path: str, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def ingest_with_openai(self, file_path: str, book_id: uuid.UUID, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Ingests a book using OpenAI's Vision Language Model (VLM).
-        This converts PDF pages to images and sends them to GPT-4o.
-
-        Args:
-            file_path (str): Path to the file.
-            book_id (uuid.UUID): Book ID.
-
-        Returns:
-            Tuple[List[StructureNode], List[ContentAtom]]: Parsed nodes and atoms.
         """
         if not self.openai_ingestor:
              raise ValueError("OpenAI API Key not set. Cannot use OpenAI Fallback.")
 
-        print(f"Starting OpenAI VLM ingestion for {file_path}...")
+        print(f"Starting OpenAI VLM ingestion for {file_path} with category {category}...")
         # Run async ingestion synchronously
-        pages_data = asyncio.run(self.openai_ingestor.ingest_book(file_path))
+        pages_data = asyncio.run(self.openai_ingestor.ingest_book(file_path, category=category))
 
         nodes = []
         atoms = []
@@ -191,7 +201,7 @@ class HybridIngestor:
         sequence_counter = 0
 
         for page_result in pages_data:
-            data = page_result['data'] # This is a PageContentModel Pydantic object
+            data = page_result['data'] # This is a SpecificPageModel Pydantic object
             page_num = page_result['page_number']
 
             # Create a Node for the Unit/Lesson or Page
@@ -222,27 +232,30 @@ class HybridIngestor:
             # Process atoms
             for atom_model in data.atoms:
                 atom_id = uuid.uuid4()
+
+                # Enrich metadata with context
+                meta = atom_model.meta_data
+                meta.book_id = str(book_id)
+                meta.page_number = page_num
+                if not meta.unit_number and data.unit_number:
+                    meta.unit_number = data.unit_number
+                if not meta.section_title and data.lesson_title:
+                    meta.section_title = data.lesson_title
+
                 atoms.append(ContentAtom(
                     id=atom_id,
                     book_id=book_id,
                     node_id=node_id,
-                    atom_type=atom_model.type,
+                    atom_type="text", # Generally text unless we map from meta.content_type
                     content_text=atom_model.content,
-                    meta_data=atom_model.meta_data or {}
+                    meta_data=meta
                 ))
 
         return nodes, atoms
 
-    def _parse_docling_structure(self, data: Dict, book_id: uuid.UUID) -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def _parse_docling_structure(self, data: Dict, book_id: uuid.UUID, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Converts raw Docling JSON output into internal StructureNode and ContentAtom objects.
-
-        Args:
-            data (Dict): The dictionary export from Docling.
-            book_id (uuid.UUID): Book ID.
-
-        Returns:
-            Tuple[List[StructureNode], List[ContentAtom]]: Parsed nodes and atoms.
         """
         # Maps Docling Headers -> DB structure_nodes
         # Maps Text/Images -> DB content_atoms
@@ -271,6 +284,8 @@ class HybridIngestor:
             label = item.get("label", "text")
             text = item.get("text", "").strip()
             level = item.get("level")
+            prov = item.get("prov", [])
+            page_no = prov[0].get("page_no", 1) if prov else 1
 
             if not text:
                 continue
@@ -292,7 +307,7 @@ class HybridIngestor:
                 new_node_id = uuid.uuid4()
                 sequence += 1
 
-                prov = item.get("prov", [])
+
                 meta_data = prov[0] if prov else {}
 
                 node = StructureNode(
@@ -310,13 +325,36 @@ class HybridIngestor:
 
             else:
                 # Content Atom
+                # Map generic Docling output to Pydantic Metadata
+                if category == "stem":
+                    meta = STEMMetadata(
+                        book_id=str(book_id),
+                        page_number=page_no,
+                        content_type="text",
+                        unit_number=0 # Unknown
+                    )
+                elif category == "history":
+                    meta = HistoryMetadata(
+                        book_id=str(book_id),
+                        page_number=page_no,
+                        content_type="text",
+                        unit_number=0
+                    )
+                else:
+                    meta = LanguageMetadata(
+                        book_id=str(book_id),
+                        page_number=page_no,
+                        content_type="text",
+                        unit_number=0
+                    )
+
                 atom = ContentAtom(
                     id=uuid.uuid4(),
                     book_id=book_id,
                     node_id=last_node_id,
                     atom_type="text",
                     content_text=text,
-                    meta_data={"label": label, "prov": item.get("prov")}
+                    meta_data=meta
                 )
                 atoms.append(atom)
 
