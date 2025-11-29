@@ -15,6 +15,7 @@ from .hybrid_ingestor import HybridIngestor
 from .models import StructureNode, ContentAtom
 from . import db
 from app.config import get_settings
+from .classification import detect_book_category
 
 def index_atoms_to_postgres(atoms: List[ContentAtom], should_mock_embedding: bool = False):
     """
@@ -34,11 +35,16 @@ def index_atoms_to_postgres(atoms: List[ContentAtom], should_mock_embedding: boo
     for atom in atoms:
         # Map metadata
         # We store key identifiers in metadata for filtering/retrieval
+        # atom.meta_data is now a Pydantic model
+
+        # Serialize Pydantic metadata to dict
+        meta_dict = atom.meta_data.model_dump(exclude_none=True)
+
         metadata = {
             "book_id": str(atom.book_id),
             "node_id": str(atom.node_id) if atom.node_id else None,
             "atom_type": atom.atom_type,
-            **atom.meta_data
+            **meta_dict
         }
 
         # Create a LlamaIndex TextNode
@@ -86,7 +92,8 @@ def index_atoms_to_postgres(atoms: List[ContentAtom], should_mock_embedding: boo
 def run_ingestion(
     file_path: str,
     book_id: Optional[uuid.UUID] = None,
-    should_mock_embedding: bool = False
+    should_mock_embedding: bool = False,
+    category: Optional[str] = None
 ) -> None:
     """
     Runs the full ingestion pipeline for a given document.
@@ -100,6 +107,7 @@ def run_ingestion(
         file_path (str): Path to the source file (PDF, JSON, etc.).
         book_id (Optional[uuid.UUID]): Unique identifier for the book. Generated if not provided.
         should_mock_embedding (bool): Whether to use mock embeddings. Defaults to False.
+        category (Optional[str]): Book category ('language', 'stem', 'history'). Detected if None.
 
     Raises:
         Exception: If any step of the ingestion process fails.
@@ -119,9 +127,17 @@ def run_ingestion(
         print("Detected JSON input. Loading directly...")
         with open(file_path, "r") as f:
             data = json.load(f)
-        nodes, atoms = ingestor._parse_docling_structure(data, book_id)
+        # Assuming JSON input is Docling format for now
+        # We need detection here too? Or passed?
+        # If category is missing, we can't easily detect from JSON dict without scanning text
+        if category is None:
+             texts = data.get("texts", [])
+             sample_text = "\n".join([t.get("text", "") for t in texts[:5]])
+             category = detect_book_category(os.path.basename(file_path), sample_text)
+
+        nodes, atoms = ingestor._parse_docling_structure(data, book_id, category)
     else:
-        nodes, atoms = ingestor.ingest_book(str(file_path), book_id)
+        nodes, atoms = ingestor.ingest_book(str(file_path), book_id, category)
 
     print(f"Parsed {len(nodes)} structure nodes and {len(atoms)} content atoms.")
 
