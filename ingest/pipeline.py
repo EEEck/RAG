@@ -119,7 +119,7 @@ def run_ingestion(
         print("Detected JSON input. Loading directly...")
         with open(file_path, "r") as f:
             data = json.load(f)
-        nodes, atoms = ingestor._parse_docling_structure(data, book_id)
+        nodes, atoms = ingestor._parse_docling_structure(data, book_id, file_path=str(file_path))
     else:
         nodes, atoms = ingestor.ingest_book(str(file_path), book_id)
 
