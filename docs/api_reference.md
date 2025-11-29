@@ -6,9 +6,13 @@
     options:
       show_root_heading: true
 
+::: app.services.search
+    options:
+      show_root_heading: true
+
 ## Ingestion Pipeline
 
-### Pipeline
+### Pipeline Entry Point
 
 ::: ingest.pipeline
     options:
@@ -20,8 +24,24 @@
     options:
       show_root_heading: true
 
-### Data Models
+### Vision Enrichment
+
+::: ingest.vision_enricher
+    options:
+      show_root_heading: true
+
+### Book Classification
+
+::: ingest.classification
+    options:
+      show_root_heading: true
+
+### Data Models & Schemas
 
 ::: ingest.models
+    options:
+      show_root_heading: true
+
+::: ingest.schemas
     options:
       show_root_heading: true
