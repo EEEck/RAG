@@ -5,3 +5,5 @@ httpx
 mkdocs
 mkdocs-material
 mkdocstrings[python]
+jupyter
+notebook
