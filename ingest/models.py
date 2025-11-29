@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Optional, Tuple, Dict, Any, List, Union
+from pydantic import BaseModel, Field
+from .schemas import LanguageMetadata, STEMMetadata, HistoryMetadata
 
 
 BBox = Tuple[float, float, float, float]
@@ -31,8 +33,7 @@ class StructureNode:
     meta_data: Dict[str, Any]
 
 
-@dataclass
-class ContentAtom:
+class ContentAtom(BaseModel):
     """
     Represents a granular piece of content (text, image description) belonging to a node.
 
@@ -42,7 +43,7 @@ class ContentAtom:
         node_id (Optional[uuid.UUID]): Foreign key to the parent StructureNode.
         atom_type (str): Type of content (e.g., 'text', 'image', 'table').
         content_text (str): The actual text content.
-        meta_data (Dict[str, Any]): Additional metadata (layout info, providence).
+        meta_data (Union[LanguageMetadata, STEMMetadata, HistoryMetadata]): Domain-specific metadata.
         embedding (Optional[List[float]]): Vector embedding of the content.
     """
     id: uuid.UUID
@@ -50,8 +51,12 @@ class ContentAtom:
     node_id: Optional[uuid.UUID]
     atom_type: str
     content_text: str
-    meta_data: Dict[str, Any]
+    meta_data: Union[LanguageMetadata, STEMMetadata, HistoryMetadata]
     embedding: Optional[List[float]] = None
+
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
 
 
 @dataclass

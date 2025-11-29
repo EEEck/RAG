@@ -16,9 +16,10 @@ class Settings(BaseSettings):
     embed_model: str = "text-embedding-3-large"
     chat_model: str = "gpt-4.1-mini"
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8"
+    }
 
     @property
     def pg_dsn(self) -> str:
