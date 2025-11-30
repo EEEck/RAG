@@ -18,8 +18,6 @@ def retrieve_and_generate(
     topic: str,
    
     category: str = "language",
-    profile_id: Optional[str] = None
-,
     profile_id: Optional[str] = None,
     use_memory: bool = False
 ) -> GenerateItemsResponse:
@@ -30,14 +28,6 @@ def retrieve_and_generate(
     3. Construct a context string from the search results.
     4. Call the generation service with this context.
     """
-
-    # 0. Fetch Profile Context (if profile_id provided)
-    pedagogy_config = None
-    if profile_id:
-        profile_service = get_profile_service()
-        profile = profile_service.get_profile(profile_id)
-        if profile:
-            pedagogy_config = profile.pedagogy_config
 
     # 0. Fetch Profile Context (if profile_id provided)
     pedagogy_config = None

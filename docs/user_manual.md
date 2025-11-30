@@ -49,7 +49,56 @@ Ingestion is currently triggered via script or code (API endpoint for ingestion 
     ```
     *(Note: You may need to modify the `__main__` block in `ingest/pipeline.py` or use a custom script to point to your specific PDF file).*
 
-## 3. Monitoring & Management
+## 3. Managing Classroom Profiles
+
+Classroom profiles allow teachers to persist settings (like grade level and preferred textbook) and pedagogy styles (e.g., "Socratic", "Grammar-focused").
+
+### Creating a Profile
+Use the `POST /profiles` endpoint to create a new profile.
+
+**Example Request:**
+```json
+{
+  "user_id": "teacher_123",
+  "name": "Grade 5 Science",
+  "grade_level": 5,
+  "pedagogy": {
+    "focus_areas": ["interactive", "visual"],
+    "tone": "enthusiastic"
+  },
+  "content_scope": {
+    "book_ids": ["science_book_v1"]
+  }
+}
+```
+
+### Switching Profiles
+The frontend or API client should store the `profile_id` returned from creation and pass it to generation endpoints (like `/generate/quiz`) to ensure the AI adapts to the specific classroom context.
+
+## 4. Curriculum Memory (Artifacts)
+
+The system can "remember" what has been taught by saving generated items as **Artifacts**. This enables features like "Review what we learned last week."
+
+### Saving an Artifact
+After generating a quiz or lesson plan that you want to keep, send it to `POST /artifacts`.
+
+**Example Request:**
+```json
+{
+  "profile_id": "profile_abc_123",
+  "type": "quiz",
+  "content": "Question 1: ...",
+  "summary": "Quiz on Photosynthesis basics",
+  "related_book_ids": ["science_book_v1"]
+}
+```
+
+### Searching Memory
+To find past materials, use `GET /artifacts`.
+*   **Filter by Profile**: `?profile_id=...`
+*   **Semantic Search**: `?query=photosynthesis` (finds conceptually related past items)
+
+## 5. Monitoring & Management
 
 ### Checking Async Jobs (Quizzes)
 When a user requests a quiz, a Job ID is returned. Check status via:
@@ -66,7 +115,7 @@ docker-compose logs -f app
 docker-compose logs -f worker
 ```
 
-## 4. Troubleshooting
+## 6. Troubleshooting
 
 *   **Database Connection Failed**:
     *   Ensure the `db` container is healthy.

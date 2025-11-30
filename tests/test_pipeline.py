@@ -16,8 +16,8 @@ from ingest.infra.postgres import PostgresStructureNodeRepository
 
 class TestIngestionPipeline(unittest.TestCase):
 
-    @patch("ingest.pipeline.PGVectorStore")
-    @patch("ingest.pipeline.VectorStoreIndex")
+    @patch("ingest.service.PGVectorStore")
+    @patch("ingest.service.VectorStoreIndex")
     @patch("ingest.infra.postgres.psycopg.connect")
     def test_run_ingestion_flow(self, mock_connect, mock_vector_index, mock_pg_store):
         # Setup Mock DB
@@ -85,8 +85,8 @@ class TestIngestionPipeline(unittest.TestCase):
         self.assertEqual(passed_nodes[0].metadata["book_id"], str(book_id))
         self.assertEqual(passed_nodes[0].metadata["category"], "language") # Verified serialized field
 
-    @patch("ingest.pipeline.PGVectorStore")
-    @patch("ingest.pipeline.VectorStoreIndex")
+    @patch("ingest.service.PGVectorStore")
+    @patch("ingest.service.VectorStoreIndex")
     @patch("ingest.infra.postgres.psycopg.connect")
     @patch("ingest.classification.detect_book_category")
     def test_json_loading(self, mock_detect, mock_connect, mock_vector_index, mock_pg_store):

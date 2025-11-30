@@ -19,7 +19,7 @@ PAGE_NO = 1
 @pytest.fixture
 def enricher():
     # Mock connection to avoid real DB access
-    with patch("ingest.vision_enricher.get_db_connection") as mock_conn:
+    with patch("ingest.vision_enricher.get_connection") as mock_conn:
         with patch("ingest.vision_enricher.OpenAI") as mock_openai: # Mock OpenAI client init
              enricher = VisionEnricher()
              yield enricher

@@ -31,10 +31,21 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
     *   **Logic**: Propagates `sequence_index` from the relational hierarchy (`structure_nodes`) to vector metadata (`content_atoms`).
     *   **Enforcement**: Allows the search API to restrict results to content "learned so far" using LlamaIndex `MetadataFilters` (LTE - Less Than or Equal), preventing future concepts from leaking into current answers.
 
-5.  **Data Storage**:
+5.  **Classroom Profiles**:
+    *   **Teacher Profiles**: Stores teacher preferences, grade levels, and user details in the `teacher_profiles` table.
+    *   **Context Injection**: The `ProfileService` retrieves active profile settings (including `PedagogyConfig`) to customize generation prompts (e.g., adapting tone, style, or specific teaching strategies).
+
+6.  **Curriculum Memory**:
+    *   **Artifacts**: Stores generated items (quizzes, lessons) as "Artifacts" in the `class_artifacts` table.
+    *   **Memory Service**: Indexes these artifacts using vector embeddings (`pgvector`) to enable semantic search over past teaching material ("What did I teach last week?").
+    *   **Hybrid Search**: Combines SQL filtering (by profile, date) with vector similarity search to retrieve relevant past content for cumulative reviews.
+
+7.  **Data Storage**:
     *   **PostgreSQL**:
         *   `structure_nodes` table: Stores hierarchy.
         *   `data_content_atoms` table (LlamaIndex managed): Stores text/image chunks and vectors (via `pgvector`) and JSONB metadata (`metadata_`).
+        *   `teacher_profiles` table: Stores profile configuration.
+        *   `class_artifacts` table: Stores generated artifacts and their embeddings.
     *   **Redis**: Used as the message broker for Celery and result backend for async jobs.
 
 ---
