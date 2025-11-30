@@ -30,6 +30,56 @@ The experience is intentionally simple:
 **pick your class → pick your book → describe what you need.**  
 Everything else – embeddings, retrieval, safety filters, pedagogy prompts – is abstracted away inside the enterprise AI layer.
 
+### Investor UX Story: Luci's First Semester
+
+**The Protagonist:** Luci, a Year 1 ESL teacher. He is overwhelmed, has a strict curriculum to follow, and 30 energetic 5th graders.
+
+#### Scene 1: The Setup (Zero Friction)
+
+Luci opens the app for the first time. He doesn't have to engineer a complex prompt.
+
+- **Action:** He simply selects "Grade 5 / CEFR A1" from a dropdown and snaps a photo of his textbook cover, *English World Level 1*.
+- **The System:** Instantly, the app locks in.  
+  - **Content Layer:** It indexes *English World Level 1*, ignoring all other books.  
+  - **Pedagogy Layer:** It silently loads the "Government ESL Standards for Primary School," which dictate that for this age group, grammar must be taught using Total Physical Response (TPR) (action-based learning).
+- **The UX:** Luci sees a "Ready" badge. The system is now an expert in his specific classroom reality.
+
+#### Scene 2: The Lesson (Grounded & Pedagogically Accurate)
+
+It's Tuesday. Luci needs a lesson plan for **Present Continuous Tense**.
+
+- **The Prompt:** Luci types just one line: "Plan a 20-minute activity for Present Continuous."
+- **Generic LLM Result (The Problem):** A generic chatbot might suggest "Discuss current global events" (too hard) or use vocabulary words like "negotiating" (not in the book).
+- **Your Platform's Result (The Solution):** The orchestrator combines the profile + textbook.
+
+**Output:**  
+> *Game: "Simon Says". Use verbs found in Chapter 4: running, jumping, eating. Avoid complex sentences. Focus on action.*
+
+Luci loves it. He clicks **"Save to Timeline"** as **Week 3 Grammar Activity**.
+
+#### Scene 3: The Spiral (The Killer Feature)
+
+Six weeks later. Midterms are coming up. Luci is panicking. He needs an exam that covers only what they actually studied.
+
+- **The Prompt:** "Create a midterm review quiz."
+- **Generic LLM Result (The Problem):** It creates a generic quiz that includes *Future Tense* (which Luci hasn't taught yet), confusing the students and frustrating parents.
+- **Your Platform's Result (The Solution):** The system scans the **curriculum artifact graph**. It sees Luci saved lessons on *Colors* (Week 1), *Animals* (Week 2), and *Present Continuous* (Week 3).
+
+**Output:** It generates a quiz specifically targeting those three topics, reusing the specific vocabulary explicitly taught in those weeks. It spirals the learning perfectly.
+
+#### Why This Beats "Just Using Claude/OpenAI"
+
+Investors will ask: *"Why can't they just use ChatGPT?"* Here is the answer:
+
+| Aspect          | Generic LLM (OpenAI/Anthropic)                                                                 | Your Platform (The "Layer on Top")                                                                                       |
+|-----------------|-----------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| Source of Truth | The internet: hallucinates vocabulary the students haven't learned yet.                        | The textbook: strictly grounded to the verified PDF provided by the school.                                              |
+| Teaching Style  | Random: one day it speaks like a professor, the next like a toddler.                           | Profile-locked: consistently applies "Government Best Practices" (like TPR) without being asked every time.             |
+| Memory          | Amnesic: forgets what you taught last Tuesday once the chat window closes.                     | Curriculum graph: remembers every lesson and quiz to build cumulative exams (spiral learning).                           |
+| Teacher Load    | High: teacher must write long, careful prompts to get decent results.                          | Near-zero: teacher clicks a button; the **orchestrator** writes the complex prompt and routing logic on their behalf.    |
+
+**The Pitch:**  
+> We aren't building the Brain (that's OpenAI). We are building the *Memory* and the *Conscience* of the classroom. We ensure the AI stays on the book, stays on the method, and remembers the student's journey.
 ---
 
 ## 2. Scope, Goals & Non-Goals
