@@ -48,14 +48,14 @@
 ### [F3-005] Logic: Review Orchestration (Date & Topic Extraction)
 **User Story:** As a teacher, I want to generate a review quiz based on material taught in a specific time window (e.g., "last week"), so the review is strictly relevant.
 **Acceptance Criteria:**
-- [ ] Implement `retrieve_and_generate` "Review Mode" or a dedicated `generate_review` service method.
-- [ ] Input: `profile_id`, `date_range` (start/end) or `relative_time` ("last_7_days").
-- [ ] Logic:
+- [x] Implement `retrieve_and_generate` "Review Mode" or a dedicated `generate_review` service method.
+- [x] Input: `profile_id`, `date_range` (start/end) or `relative_time` ("last_7_days").
+- [x] Logic:
     1.  Fetch artifacts for the profile within the date range.
     2.  Extract key topics/concepts from these artifacts (from `topic_tags` or `summary`).
     3.  (Optional) Re-query the Textbook RAG for these specific topics to get fresh source material.
     4.  Construct a prompt: "Based on these past lessons [summaries] and this textbook content [content], generate a review quiz."
-**Status:** TODO
+**Status:** DONE
 
 ### [F3-006] API: Artifact Filtering (Timeline View)
 **User Story:** As a teacher, I want to see a timeline of what I've taught, filtered by date and type, so I can plan my next lesson.

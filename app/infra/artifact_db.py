@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import List, Optional
 import psycopg
 from app.db import get_conn
@@ -107,5 +108,38 @@ class ArtifactRepository:
                         # embedding=row[6], # Skip loading embedding back
                         related_book_ids=row[7],
                         topic_tags=row[8]
+                    ))
+        return artifacts
+
+    def get_artifacts_by_date_range(self, profile_id: str, start_date: datetime, end_date: datetime) -> List[Artifact]:
+        """
+        Retrieves artifacts for a profile within a specific date range (inclusive).
+        """
+        query = """
+        SELECT id, profile_id, type, content, summary, created_at, related_book_ids, topic_tags
+        FROM class_artifacts
+        WHERE profile_id = %s
+          AND created_at >= %s
+          AND created_at <= %s
+        ORDER BY created_at DESC;
+        """
+        params = (profile_id, start_date, end_date)
+
+        artifacts = []
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                for row in rows:
+                    artifacts.append(Artifact(
+                        id=row[0],
+                        profile_id=row[1],
+                        type=row[2],
+                        content=row[3],
+                        summary=row[4],
+                        created_at=row[5],
+                        embedding=None, # Explicitly none to avoid fetching large vectors
+                        related_book_ids=row[6],
+                        topic_tags=row[7]
                     ))
         return artifacts
