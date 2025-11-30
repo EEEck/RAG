@@ -26,7 +26,25 @@
 * **Caching:** Redis (Semantic Cache).  
 * **LLM:** OpenAI / Gemini.
 
-## **3\. The Universal Database Schema (LlamaIndex Adapted)**
+## **3\. Coding Best Practices & Design Principles**
+
+To ensure maintainability and generalizability across domains (ESL, STEM, History), the codebase adheres to the following principles:
+
+### **Single Responsibility Principle (SRP)**
+*   **IngestionService (`ingest/service.py`):** Orchestrates the ingestion workflow but delegates specific tasks. It does not know *how* to parse a PDF or *how* to insert into Postgres, only *that* it should be done.
+*   **Repositories:** Handle DB persistence (`StructureNodeRepository`).
+*   **SearchService:** Handles retrieval logic only.
+*   **PromptFactory:** Manages the selection of LLM system prompts.
+
+### **Dependency Injection (DI)**
+*   Core services (`IngestionService`, `SearchService`) receive their dependencies (repositories, vector stores, ingestors) via their constructors.
+*   This facilitates testing (e.g., passing a `SQLiteRepository` or `MockIngestor` during integration tests) and prevents tight coupling to infrastructure.
+
+### **Separation of Concerns**
+*   **Domain Agnosticism:** The core RAG pipeline deals with generic `ContentAtom` and `AtomHit` objects. Domain-specific logic (e.g., separating "vocab" vs "grammar") is handled via metadata filtering or post-processing, not hardcoded into the retrieval method.
+*   **Legacy Compatibility:** Wrappers (like the old `run_ingestion` function) maintain backward compatibility for existing scripts while redirecting calls to the new modular services.
+
+## **4\. The Universal Database Schema (LlamaIndex Adapted)**
 
 *Updated strategy: Use LlamaIndex managed tables for content, metadata for partitioning.*
 
@@ -50,13 +68,27 @@ CREATE TABLE structure_nodes (
 \-- Key columns: id, text, metadata, embedding.
 \-- 'book_id', 'node_id', 'atom_type' are stored in the 'metadata' JSONB column.
 
-## **4\. The Hybrid Ingestion Pipeline (Python)**
+## **5\. The Ingestion Architecture**
 
-This router logic handles the "Clean Layout" vs. "Complex Syntax" trade-off.
+The ingestion process is decoupled into a service-oriented architecture:
 
-*(See `ingest/hybrid_ingestor.py` and `ingest/pipeline.py` for implementation)*
+1.  **IngestionService:** The entry point.
+2.  **Ingestor Strategy:** `HybridIngestor` (Docling + LlamaParse) parses the file into `StructureNode`s and `ContentAtom`s.
+3.  **Persistence Layer:** `StructureNodeRepository` saves the hierarchy to Postgres (or SQLite for tests).
+4.  **Vector Indexing:** `IngestionService` converts atoms to LlamaIndex nodes and pushes them to the `VectorStore`.
+5.  **Async Enrichment:** Post-ingestion tasks (like vision processing) are triggered asynchronously via Celery.
 
-## **5\. API & Scaling Architecture**
+## **6\. Search & Generation Architecture**
+
+### **Generic Retrieval**
+*   **`SearchService.search_content`:** Returns a generic list of `AtomHit` objects. It filters by `book_id`, `sequence_index`, and `unit` using LlamaIndex metadata filters.
+*   It is agnostic to the content type (Text, Vocab, Math Formula), making it suitable for any subject domain.
+
+### **Dynamic Generation**
+*   **`PromptFactory`:** The `GenerateItemsRequest` includes a `category` (e.g., 'language', 'stem', 'history'). The factory selects the appropriate system prompt for the LLM.
+*   **Context Injection:** Retrieved `AtomHit` content is injected into the prompt as "Source Material".
+
+## **7\. API & Scaling Architecture**
 
 To handle "Thundering Herds" (30 teachers clicking 'Generate' at once), we use an Asynchronous Queue pattern.
 
@@ -87,13 +119,14 @@ We implement a "Curriculum Guard" by strictly filtering search results based on 
 3.  **API & UX:**
     *   The API accepts an optional `max_sequence_index` parameter.
     *   **Frontend Responsibility:** The UI should allow the teacher to select the current lesson/unit. The frontend translates this selection into the corresponding `sequence_index` (or the backend provides a lookup) and sends it with the search request.
-## **6\. Implementation Roadmap (4 Weeks)**
+## **8\. Implementation Roadmap (4 Weeks)**
 
 ### **Week 1: The "Data Foundation"**
 
 * [x] **Infra:** Set up Postgres (pgvector) and Redis locally via Docker Compose.
 * [x] **Schema:** Run the SQL DDL for structure_nodes and content_atoms (LlamaIndex).
 * [x] **Ingestion:** Implement the HybridIngestor class.
+* [x] **Refactor:** Modularize Ingestion and Search services for generic support.
 
 ### **Week 2: The "Enrichment Engine"**
 

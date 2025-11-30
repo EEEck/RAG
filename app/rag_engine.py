@@ -7,7 +7,7 @@ from .services.search_service import get_search_service
 from .services.generation import generate_items
 from .schemas import GenerateItemsRequest, ConceptPack, GenerateItemsResponse
 
-def retrieve_and_generate(book_id: str, unit: int, topic: str) -> GenerateItemsResponse:
+def retrieve_and_generate(book_id: str, unit: int, topic: str, category: str = "language") -> GenerateItemsResponse:
     """
     Orchestrates the RAG pipeline:
     1. Search for content atoms based on book_id, unit, and topic.
@@ -18,34 +18,24 @@ def retrieve_and_generate(book_id: str, unit: int, topic: str) -> GenerateItemsR
     # 1. Search (Retrieval)
     search_service = get_search_service()
 
-    # Returns SearchResponse object
-    search_response = search_service.search_lessons_and_vocab(
+    # Returns SearchResponse object with generic atoms
+    search_response = search_service.search_content(
         query=topic,
-        top_lessons=5,
-        top_vocab=5,
+        limit=10, # Combine previous top_lessons + top_vocab
         max_unit=unit,
         book_id=book_id
     )
 
     atoms = search_response.atoms
-    lessons = search_response.lessons
-    vocab = search_response.vocab
 
     # 2. Construct Context
-    # We prioritize 'atoms' which are generic.
     context_parts = []
 
     if atoms:
         for atom in atoms:
-            context_parts.append(f"--- Segment (Score: {atom.score:.2f}) ---\n{atom.content}")
-    else:
-        # Fallback to legacy hits if atoms list is empty (though search.py now populates it)
-        for lesson in lessons:
-             if lesson.content:
-                 context_parts.append(f"--- Lesson {lesson.lesson_code} ---\n{lesson.content}")
-        for v in vocab:
-             if v.content:
-                 context_parts.append(f"--- Vocab: {v.term} ---\n{v.content}")
+            # We can optionally differentiate display based on metadata type
+            # but for the LLM context, raw content is usually best.
+            context_parts.append(f"--- Segment (Type: {atom.metadata.get('atom_type', 'text')}) ---\n{atom.content}")
 
     full_context = "\n\n".join(context_parts)
 
@@ -58,7 +48,8 @@ def retrieve_and_generate(book_id: str, unit: int, topic: str) -> GenerateItemsR
         lesson_code=f"Unit {unit}",
         concept_pack=ConceptPack(vocab=[], themes=[topic]),
         count=5, # Default count
-        context_text=full_context
+        context_text=full_context,
+        category=category # Pass the category to select the correct prompt
     )
 
     return generate_items(req)
