@@ -6,9 +6,9 @@ This board tracks the high-level progress of the AI Teaching Assistant Platform 
 
 | ID | Epic Name | Status | Description |
 | :--- | :--- | :--- | :--- |
-| **[EPIC-1](EPIC-1_Textbook_RAG.md)** | **Textbook RAG Engine** | 🟢 **Done/Stable** | Core ingestion, vector search, and curriculum-safe retrieval. |
+| **[EPIC-1](EPIC-1_Textbook_RAG.md)** | **Textbook RAG Engine** | 🟡 **In Progress** | Core ingestion, vector search. **Focus:** Discovery API & Search Safety. |
 | **[EPIC-2](EPIC-2_Classroom_Profiles.md)** | **Classroom Profiles** | 🟢 **Done** | Persist teacher settings, pedagogy, and active textbook links. |
-| **[EPIC-3](EPIC-3_Curriculum_Memory.md)** | **Curriculum Memory** | 🟡 **In Progress** | Save generated artifacts and enable cumulative reviews over time. |
+| **[EPIC-3](EPIC-3_Curriculum_Memory.md)** | **Curriculum Memory** | 🟡 **In Progress** | Save generated artifacts. **Focus:** Review Logic & Timeline Filters. |
 
 ## Workflow
 
@@ -19,5 +19,6 @@ This board tracks the high-level progress of the AI Teaching Assistant Platform 
 5.  **Reflect:** Update `AGENTS.md` if new architectural patterns emerge.
 
 ## Current Focus
-*   Maintain stability of **EPIC-1** and **EPIC-2**.
-*   Continue implementation of **EPIC-3** (Review Orchestration & Timeline View).
+*   **Discovery & Safety:** Implement [F1-010] List Books API and [F1-011] Search Scoping.
+*   **Memory Intelligence:** Implement [F3-005] Review Logic and [F3-006] Timeline Filters.
+*   **Verification:** Run [F3-007] E2E Review Script.
