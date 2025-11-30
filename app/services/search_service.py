@@ -26,7 +26,7 @@ class SearchService:
         limit: int = 10,
         max_unit: int | None = None,
         max_sequence_index: int | None = None,
-        book_id: str | None = None,
+        book_ids: List[str] | None = None,
     ) -> SearchResponse:
         """
         Searches for content atoms using LlamaIndex with optional Curriculum Guard.
@@ -36,13 +36,29 @@ class SearchService:
         # Build Filters
         filters_list = []
 
-        if book_id:
-            filters_list.append(
-                MetadataFilter(
-                    key="book_id",
-                    value=book_id,
-                    operator=FilterOperator.EQ
+        if book_ids:
+            if len(book_ids) == 1:
+                filters_list.append(
+                    MetadataFilter(
+                        key="book_id",
+                        value=book_ids[0],
+                        operator=FilterOperator.EQ
+                    )
                 )
+            else:
+                filters_list.append(
+                    MetadataFilter(
+                        key="book_id",
+                        value=book_ids,
+                        operator=FilterOperator.IN
+                    )
+                )
+        elif book_ids is not None and len(book_ids) == 0:
+            # If book_ids is explicitly empty (e.g. strict mode with no books), return empty results
+            return SearchResponse(
+                lessons=[],
+                vocab=[],
+                atoms=[]
             )
 
         # Curriculum Guard

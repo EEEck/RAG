@@ -27,8 +27,8 @@ class ProfileService:
 
         query = """
         INSERT INTO teacher_profiles (
-            id, user_id, name, grade_level, pedagogy_config, content_scope
-        ) VALUES (%s, %s, %s, %s, %s, %s)
+            id, user_id, name, grade_level, pedagogy_config, content_scope, book_list
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         RETURNING id, created_at, updated_at;
         """
 
@@ -40,7 +40,8 @@ class ProfileService:
                     profile.name,
                     profile.grade_level,
                     json.dumps(profile.pedagogy_config.model_dump()),
-                    json.dumps(profile.content_scope.model_dump())
+                    json.dumps(profile.content_scope.model_dump()),
+                    profile.book_list
                 ))
                 row = cur.fetchone()
                 conn.commit()
@@ -97,6 +98,7 @@ class ProfileService:
             grade_level = %s,
             pedagogy_config = %s,
             content_scope = %s,
+            book_list = %s,
             updated_at = NOW()
         WHERE id = %s
         RETURNING *;
@@ -109,6 +111,7 @@ class ProfileService:
                     updates.grade_level,
                     json.dumps(updates.pedagogy_config.model_dump()),
                     json.dumps(updates.content_scope.model_dump()),
+                    updates.book_list,
                     profile_id
                 ))
                 row = cur.fetchone()
@@ -125,12 +128,15 @@ class ProfileService:
         """
         pedagogy = row.get('pedagogy_config') or {}
         scope = row.get('content_scope') or {}
+        book_list = row.get('book_list') or []
 
         # Handle case where JSONB comes back as string (depending on driver config)
         if isinstance(pedagogy, str):
             pedagogy = json.loads(pedagogy)
         if isinstance(scope, str):
             scope = json.loads(scope)
+        if isinstance(book_list, str):
+            book_list = json.loads(book_list)
 
         return TeacherProfile(
             id=str(row['id']),
@@ -138,7 +144,8 @@ class ProfileService:
             name=row['name'],
             grade_level=row['grade_level'],
             pedagogy_config=PedagogyConfig(**pedagogy),
-            content_scope=ContentScope(**scope)
+            content_scope=ContentScope(**scope),
+            book_list=book_list
         )
 
 # Singleton or factory

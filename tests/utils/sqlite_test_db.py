@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS teacher_profiles (
     grade_level TEXT,
     pedagogy_config TEXT DEFAULT '{}',
     content_scope TEXT DEFAULT '{}',
+    book_list TEXT DEFAULT '[]',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -63,6 +64,71 @@ def cosine_similarity(v1: List[float], v2: List[float]) -> float:
     return dot_product / (norm_a * norm_b)
 
 
+class SQLiteCursorWrapper:
+    def __init__(self, cursor):
+        self.cursor = cursor
+
+    def execute(self, query, params=None):
+        # Convert %s to ?
+        query = query.replace("%s", "?")
+        # Also handle NOW() -> CURRENT_TIMESTAMP
+        query = query.replace("NOW()", "CURRENT_TIMESTAMP")
+
+        if params:
+             # Auto-convert list params to JSON strings for SQLite compatibility
+             new_params = []
+             for p in params:
+                 if isinstance(p, list):
+                     new_params.append(json.dumps(p))
+                 else:
+                     new_params.append(p)
+             return self.cursor.execute(query, tuple(new_params))
+        return self.cursor.execute(query)
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+
+        # We need description to map keys
+        cols = [d[0] for d in self.cursor.description]
+        return dict(zip(cols, row))
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        cols = [d[0] for d in self.cursor.description]
+        return [dict(zip(cols, row)) for row in rows]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
+class SQLiteConnectionWrapper:
+    def __init__(self, conn, close_on_exit=True):
+        self.conn = conn
+        self.close_on_exit = close_on_exit
+
+    def cursor(self, row_factory=None):
+        # We ignore row_factory argument to prevent TypeError
+        return SQLiteCursorWrapper(self.conn.cursor())
+
+    def commit(self):
+        self.conn.commit()
+
+    def close(self):
+        if self.close_on_exit:
+            self.conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
 class SQLiteTestDB:
     """
     A single SQLite database manager that can serve as a repository
@@ -71,14 +137,27 @@ class SQLiteTestDB:
 
     def __init__(self, db_path: str = ":memory:"):
         self.db_path = db_path
+        self._shared_conn = None
+        if db_path == ":memory:":
+             # Use a shared connection for :memory: databases
+             self._shared_conn = sqlite3.connect(":memory:", check_same_thread=False)
+             self._shared_conn.execute("PRAGMA foreign_keys = ON")
 
-    def get_connection(self) -> sqlite3.Connection:
+    def get_connection(self) -> SQLiteConnectionWrapper:
+        if self._shared_conn:
+            return SQLiteConnectionWrapper(self._shared_conn, close_on_exit=False)
+
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+        return SQLiteConnectionWrapper(conn, close_on_exit=True)
 
     def ensure_schema(self) -> None:
-        with self.get_connection() as conn:
+        # We need the raw sqlite connection or wrapper with script support?
+        # SQLiteConnectionWrapper does not expose executescript.
+        # But we can assume get_connection returns wrapper, and we can access .conn
+        conn_wrapper = self.get_connection()
+        conn = conn_wrapper.conn
+        with conn:
             conn.executescript(SQLITE_STRUCTURE_NODES_SCHEMA)
             conn.executescript(SQLITE_TEACHER_PROFILES_SCHEMA)
             conn.executescript(SQLITE_ARTIFACTS_SCHEMA)
@@ -105,16 +184,21 @@ class SQLiteTestDB:
             )
             for n in nodes
         ]
-        with self.get_connection() as conn:
+
+        # We need raw connection for executemany with ? placeholders if we used wrapper it converts %s to ?
+        # But here we used ? directly.
+        # So we can use raw connection.
+        conn_wrapper = self.get_connection()
+        with conn_wrapper.conn as conn:
             conn.executemany(query, data)
             conn.commit()
 
     # --- Profile Methods ---
 
-    def insert_profile(self, id: str, user_id: str, name: str, grade_level: str, pedagogy_config: dict, content_scope: dict) -> None:
+    def insert_profile(self, id: str, user_id: str, name: str, grade_level: str, pedagogy_config: dict, content_scope: dict, book_list: List[str] = []) -> None:
         query = """
-        INSERT OR REPLACE INTO teacher_profiles (id, user_id, name, grade_level, pedagogy_config, content_scope)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO teacher_profiles (id, user_id, name, grade_level, pedagogy_config, content_scope, book_list)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """
         data = (
             id,
@@ -122,15 +206,18 @@ class SQLiteTestDB:
             name,
             grade_level,
             json.dumps(pedagogy_config),
-            json.dumps(content_scope)
+            json.dumps(content_scope),
+            json.dumps(book_list)
         )
-        with self.get_connection() as conn:
+        conn_wrapper = self.get_connection()
+        with conn_wrapper.conn as conn:
             conn.execute(query, data)
             conn.commit()
 
     def get_profile(self, profile_id: str) -> Optional[dict]:
-        query = "SELECT id, user_id, name, grade_level, pedagogy_config, content_scope FROM teacher_profiles WHERE id = ?"
-        with self.get_connection() as conn:
+        query = "SELECT id, user_id, name, grade_level, pedagogy_config, content_scope, book_list FROM teacher_profiles WHERE id = ?"
+        conn_wrapper = self.get_connection()
+        with conn_wrapper.conn as conn:
             cur = conn.execute(query, (profile_id,))
             row = cur.fetchone()
             if row:
@@ -140,7 +227,8 @@ class SQLiteTestDB:
                     "name": row[2],
                     "grade_level": row[3],
                     "pedagogy_config": json.loads(row[4]),
-                    "content_scope": json.loads(row[5])
+                    "content_scope": json.loads(row[5]),
+                    "book_list": json.loads(row[6]) if row[6] else []
                 }
         return None
 
@@ -162,7 +250,8 @@ class SQLiteTestDB:
             json.dumps(artifact.related_book_ids),
             json.dumps(artifact.topic_tags)
         )
-        with self.get_connection() as conn:
+        conn_wrapper = self.get_connection()
+        with conn_wrapper.conn as conn:
             conn.execute(query, data)
             conn.commit()
 
@@ -174,7 +263,8 @@ class SQLiteTestDB:
         query = "SELECT id, profile_id, type, content, summary, created_at, embedding, related_book_ids, topic_tags FROM class_artifacts WHERE profile_id = ?"
 
         results = []
-        with self.get_connection() as conn:
+        conn_wrapper = self.get_connection()
+        with conn_wrapper.conn as conn:
             cur = conn.execute(query, (profile_id,))
             rows = cur.fetchall()
 

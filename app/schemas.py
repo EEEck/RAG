@@ -11,6 +11,9 @@ class SearchRequest(BaseModel):
     top_vocab: int = 5
     max_unit: Optional[int] = None
     max_sequence_index: Optional[int] = None
+    book_id: Optional[str] = None
+    profile_id: Optional[str] = None
+    strict_mode: bool = False
 
 
 class AtomHit(BaseModel):
@@ -114,3 +117,4 @@ class TeacherProfile(BaseModel):
     grade_level: Optional[str] = None
     pedagogy_config: PedagogyConfig = PedagogyConfig()
     content_scope: ContentScope = ContentScope()
+    book_list: List[str] = []
