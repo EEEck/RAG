@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from celery.result import AsyncResult
 
 from .config import get_settings
-from .routes import search, concept
+from .routes import search, concept, profiles
 from .celery_worker import generate_quiz_task
 
 # Load environment variables (expects OPENAI_API_KEY, PG creds in .env)
@@ -20,6 +20,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 app = FastAPI(title="ESL RAG Backend", version="0.1.0")
 app.include_router(search.router)
 app.include_router(concept.router)
+app.include_router(profiles.router)
 
 
 class QuizRequest(BaseModel):
