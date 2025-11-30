@@ -1,8 +1,9 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.services.memory_service import MemoryService
+from app.services.profile_service import ProfileService, get_profile_service
 from app.schemas import AtomHit
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
@@ -28,11 +29,16 @@ class ArtifactResponse(BaseModel):
 @router.post("/", response_model=ArtifactResponse)
 def save_artifact(
     request: SaveArtifactRequest,
-    service: MemoryService = Depends(get_memory_service)
+    service: MemoryService = Depends(get_memory_service),
+    profile_service: ProfileService = Depends(get_profile_service)
 ):
     """
     Save a generated item (lesson, quiz) as a memory artifact.
     """
+    # Validate Profile Exists
+    if not profile_service.get_profile(request.profile_id):
+        raise HTTPException(status_code=404, detail=f"Profile with ID {request.profile_id} not found.")
+
     try:
         artifact = service.save_artifact(
             profile_id=request.profile_id,
@@ -53,17 +59,24 @@ def save_artifact(
 
 @router.get("/", response_model=List[AtomHit])
 def list_artifacts(
-    profile_id: str,
+    profile_id: Optional[str] = Query(None),
     query: Optional[str] = None,
     limit: int = 5,
-    service: MemoryService = Depends(get_memory_service)
+    service: MemoryService = Depends(get_memory_service),
+    profile_service: ProfileService = Depends(get_profile_service)
 ):
     """
     Retrieve artifacts for a profile, optionally matching a query (semantic search).
     Returns generic AtomHit objects for consistency with Search API.
     """
-    try:
-        hits = service.search_artifacts(profile_id, query, limit)
-        return hits
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    if profile_id:
+        if not profile_service.get_profile(profile_id):
+            raise HTTPException(status_code=404, detail=f"Profile with ID {profile_id} not found.")
+        try:
+            hits = service.search_artifacts(profile_id, query, limit)
+            return hits
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    else:
+        # Search without profile: return empty list as requested for decoupled handling
+        return []
