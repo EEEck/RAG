@@ -10,6 +10,7 @@ from ..schemas import (
     GenerateItemsResponse,
     GeneratedItem,
     ScopeReport,
+    PedagogyConfig,
 )
 
 # --- Prompt Factory ---
@@ -41,12 +42,28 @@ class PromptFactory:
     }
 
     @classmethod
-    def get_prompt(cls, category: str) -> str:
-        return cls._PROMPTS.get(category.lower(), cls._PROMPTS["language"])
+    def get_prompt(cls, category: str, pedagogy: PedagogyConfig = None) -> str:
+        base_prompt = cls._PROMPTS.get(category.lower(), cls._PROMPTS["language"])
+
+        if pedagogy:
+            pedagogy_instructions = []
+            if pedagogy.tone and pedagogy.tone != "neutral":
+                pedagogy_instructions.append(f"Tone: {pedagogy.tone}.")
+            if pedagogy.style and pedagogy.style != "standard":
+                pedagogy_instructions.append(f"Style: {pedagogy.style}.")
+            if pedagogy.focus_areas:
+                pedagogy_instructions.append(f"Focus Areas: {', '.join(pedagogy.focus_areas)}.")
+            if pedagogy.adaptation_level and pedagogy.adaptation_level != "standard":
+                pedagogy_instructions.append(f"Adaptation Level: {pedagogy.adaptation_level}.")
+
+            if pedagogy_instructions:
+                base_prompt += "\n\n### PEDAGOGY INSTRUCTIONS ###\n" + "\n".join(pedagogy_instructions)
+
+        return base_prompt
 
 # --- Generation Service ---
 
-def generate_items(req: GenerateItemsRequest) -> GenerateItemsResponse:
+def generate_items(req: GenerateItemsRequest, pedagogy_config: PedagogyConfig = None) -> GenerateItemsResponse:
     """
     Use an LLM to generate items constrained by the given concept pack or provided context.
     """
@@ -54,7 +71,7 @@ def generate_items(req: GenerateItemsRequest) -> GenerateItemsResponse:
     client = get_sync_client()
 
     # 1. Select System Prompt
-    system_prompt = PromptFactory.get_prompt(req.category)
+    system_prompt = PromptFactory.get_prompt(req.category, pedagogy_config)
 
     # 2. Build User Payload
     user_payload = {

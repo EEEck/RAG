@@ -6,13 +6,20 @@ from typing import List, Optional
 from .services.search_service import get_search_service
 from .services.generation import generate_items
 from .services.memory_service import MemoryService
-from .schemas import GenerateItemsRequest, ConceptPack, GenerateItemsResponse
+from .services.profile_service import get_profile_service
+from .schemas import GenerateItemsRequest, ConceptPack, GenerateItemsResponse, PedagogyConfig
 
 def retrieve_and_generate(
+    
     book_id: str,
+   
     unit: int,
+   
     topic: str,
+   
     category: str = "language",
+    profile_id: Optional[str] = None
+,
     profile_id: Optional[str] = None,
     use_memory: bool = False
 ) -> GenerateItemsResponse:
@@ -23,6 +30,22 @@ def retrieve_and_generate(
     3. Construct a context string from the search results.
     4. Call the generation service with this context.
     """
+
+    # 0. Fetch Profile Context (if profile_id provided)
+    pedagogy_config = None
+    if profile_id:
+        profile_service = get_profile_service()
+        profile = profile_service.get_profile(profile_id)
+        if profile:
+            pedagogy_config = profile.pedagogy_config
+
+    # 0. Fetch Profile Context (if profile_id provided)
+    pedagogy_config = None
+    if profile_id:
+        profile_service = get_profile_service()
+        profile = profile_service.get_profile(profile_id)
+        if profile:
+            pedagogy_config = profile.pedagogy_config
 
     # 1. Search (Retrieval)
     search_service = get_search_service()
@@ -79,4 +102,4 @@ def retrieve_and_generate(
         use_memory=use_memory
     )
 
-    return generate_items(req)
+    return generate_items(req, pedagogy_config=pedagogy_config)

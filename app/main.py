@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from celery.result import AsyncResult
 
 from .config import get_settings
-from .routes import search, concept, artifacts
+from .routes import search, concept, profiles, artifacts
 from .celery_worker import generate_quiz_task
 from .infra.artifact_db import ArtifactRepository
 
@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ESL RAG Backend", version="0.1.0", lifespan=lifespan)
 app.include_router(search.router)
 app.include_router(concept.router)
+app.include_router(profiles.router)
 app.include_router(artifacts.router)
 
 
