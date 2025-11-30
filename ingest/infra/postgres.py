@@ -4,6 +4,7 @@ import psycopg
 from typing import List
 from ..models import StructureNode
 from ..interfaces import StructureNodeRepository
+from .connection import get_connection
 
 # Postgres Schema
 POSTGRES_SCHEMA_SQL = """
@@ -19,6 +20,18 @@ CREATE TABLE IF NOT EXISTS structure_nodes (
     sequence_index INTEGER,
     meta_data JSONB
 );
+
+-- 2. Teacher Profiles
+CREATE TABLE IF NOT EXISTS teacher_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    grade_level TEXT,
+    pedagogy_config JSONB DEFAULT '{}',
+    content_scope JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 """
 
 class PostgresStructureNodeRepository(StructureNodeRepository):
@@ -31,13 +44,7 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
         self.password = password or os.getenv("POSTGRES_PASSWORD", "rag")
 
     def get_connection(self) -> psycopg.Connection:
-        return psycopg.connect(
-            host=self.host,
-            dbname=self.dbname,
-            user=self.user,
-            password=self.password,
-            autocommit=False
-        )
+        return get_connection(self.host, self.dbname, self.user, self.password)
 
     def ensure_schema(self) -> None:
         with self.get_connection() as conn:

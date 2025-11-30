@@ -91,3 +91,24 @@ class ScopeReport(BaseModel):
 class GenerateItemsResponse(BaseModel):
     items: List[GeneratedItem]
     scope_report: ScopeReport
+
+
+class PedagogyConfig(BaseModel):
+    tone: Optional[str] = "neutral"
+    style: Optional[str] = "standard"
+    focus_areas: List[str] = []
+    adaptation_level: Optional[str] = "standard"
+
+
+class ContentScope(BaseModel):
+    banned_topics: List[str] = []
+    preferred_sources: List[str] = []
+
+
+class TeacherProfile(BaseModel):
+    id: Optional[str] = None
+    user_id: str
+    name: str
+    grade_level: Optional[str] = None
+    pedagogy_config: PedagogyConfig = PedagogyConfig()
+    content_scope: ContentScope = ContentScope()
