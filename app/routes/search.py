@@ -14,10 +14,9 @@ def search(req: SearchRequest) -> SearchResponse:
     # Service now returns SearchResponse object directly
     search_service = get_search_service()
 
-    response = search_service.search_lessons_and_vocab(
+    response = search_service.search_content(
         query=req.query,
-        top_lessons=req.top_lessons,
-        top_vocab=req.top_vocab,
+        limit=req.top_lessons + req.top_vocab,
         max_unit=req.max_unit,
         max_sequence_index=req.max_sequence_index,
     )

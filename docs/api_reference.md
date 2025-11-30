@@ -10,6 +10,26 @@
     options:
       show_root_heading: true
 
+### Classroom Profiles
+
+::: app.routes.profiles
+    options:
+      show_root_heading: true
+
+::: app.services.profile_service
+    options:
+      show_root_heading: true
+
+### Curriculum Memory (Artifacts)
+
+::: app.routes.artifacts
+    options:
+      show_root_heading: true
+
+::: app.services.memory_service
+    options:
+      show_root_heading: true
+
 ## Ingestion Pipeline
 
 ### Ingestion Service (Core)
