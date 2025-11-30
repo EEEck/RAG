@@ -34,8 +34,7 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
 5.  **Data Storage**:
     *   **PostgreSQL**:
         *   `structure_nodes` table: Stores hierarchy.
-        *   `content_atoms` table: Stores text chunks and vectors (via `pgvector`) and JSONB metadata (`metadata_`).
-        *   `content_atoms` table: Stores text/image chunks and vectors (via `pgvector`).
+        *   `data_content_atoms` table (LlamaIndex managed): Stores text/image chunks and vectors (via `pgvector`) and JSONB metadata (`metadata_`).
     *   **Redis**: Used as the message broker for Celery and result backend for async jobs.
 
 ---
@@ -83,7 +82,7 @@ While 100s of users is not "web scale", providing low-latency semantic search ov
 *   **Targeted Search (Metadata Filtering)**:
     *   Users typically query *specific* books (e.g., "Show me vocabulary from Book A").
     *   We leverage the `book_id` metadata column in `pgvector`.
-    *   **Partitioning**: In a production Postgres setup, we would partition the `content_atoms` table by `book_id` (list partitioning) or hash partitioning. This allows the query planner to scan only the relevant partitions, drastically reducing search time compared to scanning a monolithic index of 1000 books.
+    *   **Partitioning**: In a production Postgres setup, we would partition the content table (e.g. `data_content_atoms`) by `book_id` (list partitioning) or hash partitioning. This allows the query planner to scan only the relevant partitions, drastically reducing search time compared to scanning a monolithic index of 1000 books.
     *   **GIN Indexing**: As mentioned, the JSONB metadata column must be GIN-indexed to support rapid filtering on `book_id`, `unit`, and `sequence_index`.
 
 *   **Caching Strategy**:

@@ -51,7 +51,8 @@ To ensure maintainability and generalizability across domains (ESL, STEM, Histor
 \-- Enable Extensions  
 CREATE EXTENSION IF NOT EXISTS vector;
 
-\-- 1\. Structure Nodes (The Table of Contents)  
+\-- 1\. Structure Nodes (The Table of Contents)
+\-- For the exact SQL implementation, see `ingest/infra/postgres.py`.
 \-- Stores the hierarchy: Book -> Unit -> Lesson -> Exercise
 CREATE TABLE structure_nodes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -64,9 +65,9 @@ CREATE TABLE structure_nodes (
 );
 
 \-- 2\. Content Atoms (LlamaIndex Managed)
-\-- LlamaIndex creates/manages the 'content_atoms' table (or similar name).
-\-- Key columns: id, text, metadata, embedding.
-\-- 'book_id', 'node_id', 'atom_type' are stored in the 'metadata' JSONB column.
+\-- LlamaIndex creates/manages the vector table (typically `data_content_atoms`).
+\-- Key columns: id, text, metadata_, embedding.
+\-- 'book_id', 'node_id', 'atom_type' are stored in the 'metadata_' JSONB column.
 
 ## **5\. The Ingestion Architecture**
 
@@ -119,6 +120,7 @@ We implement a "Curriculum Guard" by strictly filtering search results based on 
 3.  **API & UX:**
     *   The API accepts an optional `max_sequence_index` parameter.
     *   **Frontend Responsibility:** The UI should allow the teacher to select the current lesson/unit. The frontend translates this selection into the corresponding `sequence_index` (or the backend provides a lookup) and sends it with the search request.
+
 ## **8\. Implementation Roadmap (4 Weeks)**
 
 ### **Week 1: The "Data Foundation"**
@@ -130,14 +132,14 @@ We implement a "Curriculum Guard" by strictly filtering search results based on 
 
 ### **Week 2: The "Enrichment Engine"**
 
-* [ ] **Vision AI:** Write script to iterate image_assets, send to Gemini Flash, and save descriptions to content_atoms (type=image_desc).
-* [ ] **Curriculum Guard:** Write the SQL query template that strictly enforces WHERE sequence_index <= X.
+* [x] **Vision AI:** Implemented async task `enrich_images_task` to send image assets to LLM and save descriptions.
+* [x] **Curriculum Guard:** Implemented `max_sequence_index` filtering in `SearchService`.
 * [x] **Embeddings:** Batch embed all text chunks using OpenAI Embedding API (via LlamaIndex).
 
 ### **Week 3: The "Scalable API"**
 
-* [ ] **Queueing:** Implement the FastAPI + Celery pattern.
-* [ ] **Caching:** Add a Redis check before calling Celery.
+* [x] **Queueing:** Implemented FastAPI + Celery pattern for quiz generation.
+* [ ] **Caching:** Add a Redis check before calling Celery (Pending).
 
 ### **Week 4: The "Frontend & Pilot"**
 
