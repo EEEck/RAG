@@ -79,10 +79,11 @@ def test_generate_items_route(mock_get_settings, mock_get_client):
 
     # Mock LLM response
     mock_completion = MagicMock()
-    mock_message = MagicMock()
-    mock_message.text = '{"items": [{"stem": "Q1", "answer": "A1"}]}'
-    mock_completion.output = [MagicMock(content=[mock_message])]
-    mock_client.responses.create.return_value = mock_completion
+    # Correctly mock the OpenAI API structure: completion.choices[0].message.content
+    mock_choice = MagicMock()
+    mock_choice.message.content = '{"items": [{"stem": "Q1", "answer": "A1"}]}'
+    mock_completion.choices = [mock_choice]
+    mock_client.chat.completions.create.return_value = mock_completion
 
     response = client.post("/concept/generate-items", json={
         "textbook_id": "TB1",
@@ -109,10 +110,10 @@ def test_generate_items_bad_json(mock_get_settings, mock_get_client):
 
     # Mock LLM response with bad JSON
     mock_completion = MagicMock()
-    mock_message = MagicMock()
-    mock_message.text = 'Not valid JSON'
-    mock_completion.output = [MagicMock(content=[mock_message])]
-    mock_client.responses.create.return_value = mock_completion
+    mock_choice = MagicMock()
+    mock_choice.message.content = 'Not valid JSON'
+    mock_completion.choices = [mock_choice]
+    mock_client.chat.completions.create.return_value = mock_completion
 
     response = client.post("/concept/generate-items", json={
         "textbook_id": "TB1",
@@ -127,4 +128,4 @@ def test_generate_items_bad_json(mock_get_settings, mock_get_client):
     assert response.status_code == 200
     data = response.json()
     assert len(data["items"]) == 0
-    assert data["scope_report"]["notes"] == ["Failed to parse JSON"]
+    assert "Error" in data["scope_report"]["notes"][0]

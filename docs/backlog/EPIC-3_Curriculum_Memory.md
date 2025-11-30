@@ -1,6 +1,6 @@
 # EPIC-3: Curriculum Graph / Memory
 
-**Status:** Backlog
+**Status:** In Progress
 **Owner:** Engineering Team
 **Goal:** Track what has been taught (quizzes, lesson plans) and use it for cumulative reviews and exams.
 
@@ -11,17 +11,17 @@
 ### [F3-001] Artifact Data Model
 **User Story:** As a developer, I want to store generated items (quizzes, lessons) as "Artifacts".
 **Acceptance Criteria:**
-- [ ] Create `Artifact` model and DB table (`class_artifacts`).
-- [ ] Fields: `profile_id`, `type` (quiz, lesson), `content_blob`, `created_at`.
-- [ ] Support vector embeddings for `summary_text`.
-**Status:** TODO
+- [x] Create `Artifact` model and DB table (`class_artifacts`).
+- [x] Fields: `profile_id`, `type` (quiz, lesson), `content_blob`, `created_at`.
+- [x] Support vector embeddings for `summary_text`.
+**Status:** DONE
 
 ### [F3-002] Save Artifact API
 **User Story:** As a teacher, I want to save a good result as an artifact for later use.
 **Acceptance Criteria:**
-- [ ] POST `/artifacts` endpoint.
-- [ ] "Promote" a chat/generation response ID to an artifact.
-**Status:** TODO
+- [x] POST `/artifacts` endpoint.
+- [x] "Promote" a chat/generation response ID to an artifact.
+**Status:** DONE
 
 ---
 
@@ -30,16 +30,16 @@
 ### [F3-003] Artifact Indexing
 **User Story:** As a system, I want to index artifacts so I can find "what I taught last week".
 **Acceptance Criteria:**
-- [ ] Compute embeddings for artifact summaries.
-- [ ] Store in `pgvector` (or separate collection).
-**Status:** TODO
+- [x] Compute embeddings for artifact summaries.
+- [x] Store in `pgvector` (or separate collection).
+**Status:** DONE
 
 ### [F3-004] Hybrid Search for Artifacts
 **User Story:** As a system, I want to search artifacts by time ("last week") and topic ("past tense").
 **Acceptance Criteria:**
-- [ ] Implement hybrid search (SQL filters for date/profile + Vector search for topic).
-- [ ] Return relevant past artifacts.
-**Status:** TODO
+- [x] Implement hybrid search (SQL filters for date/profile + Vector search for topic).
+- [x] Return relevant past artifacts.
+**Status:** DONE
 
 ---
 

@@ -15,7 +15,7 @@ from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.embeddings.openai import OpenAIEmbedding
 
-from .db import get_db_connection
+from ingest.infra.connection import get_connection
 from .models import ContentAtom
 
 class VisionEnricher:
@@ -28,7 +28,7 @@ class VisionEnricher:
         """
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         # We use a separate connection for raw queries
-        self.conn = get_db_connection()
+        self.conn = get_connection()
 
     def __del__(self):
         if hasattr(self, 'conn') and self.conn:

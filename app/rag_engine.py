@@ -18,8 +18,6 @@ def retrieve_and_generate(
     topic: str,
    
     category: str = "language",
-    profile_id: Optional[str] = None
-,
     profile_id: Optional[str] = None,
     use_memory: bool = False
 ) -> GenerateItemsResponse:

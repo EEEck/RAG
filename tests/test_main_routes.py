@@ -25,40 +25,30 @@ def test_config_preview(mock_getenv, mock_get_settings):
     assert data["postgres_dsn"] == "postgres://user:pass@localhost:5432/db"
     assert data["embed_model"] == "test-model"
 
-@patch("app.services.search.embed_texts")
-@patch("app.services.search.get_conn")
-@patch("app.services.search.get_settings")
-def test_search_route(mock_get_settings, mock_get_conn, mock_embed_texts):
-    # Mock settings
-    mock_settings = MagicMock()
-    mock_settings.embed_model = "test-model"
-    mock_get_settings.return_value = mock_settings
+@patch("app.routes.search.get_search_service")
+def test_search_route(mock_get_service):
+    mock_service = MagicMock()
+    mock_get_service.return_value = mock_service
 
-    # Mock embeddings
-    mock_embed_texts.return_value = [[0.1, 0.2, 0.3]]
-
-    # Mock DB connection
-    mock_conn = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_conn.return_value.__enter__.return_value = mock_conn
-    mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-
-    # Mock DB results
-    # First query is for lessons: id, unit, lesson_code, title, score
-    mock_cursor.fetchall.side_effect = [
-        [(1, 1, "L1", "Lesson 1", 0.9)],
-        [(1, 1, "L1", "hello", 0.8)]
-    ]
+    # Setup mock response from service
+    from app.schemas import SearchResponse, AtomHit, LessonHit, VocabHit
+    mock_service.search_content.return_value = SearchResponse(
+        lessons=[],
+        vocab=[],
+        atoms=[
+             AtomHit(id="1", content="Lesson 1 Content", metadata={"lesson_code": "L1", "title": "Lesson 1", "atom_type": "lesson"}, score=0.9),
+             AtomHit(id="2", content="hello definition", metadata={"term": "hello", "atom_type": "vocab"}, score=0.8)
+        ]
+    )
 
     response = client.post("/search", json={
         "query": "hello",
-        "top_lessons": 5,
-        "top_vocab": 5
+        "book_id": "test_book"
     })
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data["lessons"]) == 1
-    assert data["lessons"][0]["lesson_code"] == "L1"
-    assert len(data["vocab"]) == 1
-    assert data["vocab"][0]["term"] == "hello"
+    # The new API returns a flat list of atoms in 'atoms', not 'lessons'/'vocab'
+    assert "atoms" in data
+    assert len(data["atoms"]) == 2
+    assert data["atoms"][0]["metadata"]["lesson_code"] == "L1"
