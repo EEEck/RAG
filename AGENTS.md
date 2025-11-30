@@ -31,9 +31,30 @@ These stories define what the system must support. Agents should not break these
 
 ---
 
-## 3. High-Level Architecture
+## 3. Project Management & Workflow
 
-### 3.1 Stack Overview
+We use a Markdown-based backlog to track progress and plan future work.
+
+### 3.1 Backlog Structure
+The backlog is located in `docs/backlog/` and consists of:
+
+*   **`BOARD.md`**: The central project board listing all Epics and their status.
+*   **`EPIC-X_Title.md`**: Detailed Epic files containing user stories, acceptance criteria, and status tracking (TODO/DONE).
+
+### 3.2 Workflow for Agents & Developers
+1.  **Check the Board:** Before starting work, review `docs/backlog/BOARD.md` to identify the active Epic.
+2.  **Select a Story:** Open the relevant Epic file and find a story marked as `TODO`.
+3.  **Implement:** Write code and tests to satisfy the Acceptance Criteria.
+4.  **Update Status:** Once the implementation is verified, change the story status to `DONE` in the Epic file.
+5.  **Reflect Changes:** If your implementation changes architectural patterns or adds new global concepts, you must update this `AGENTS.md` file to reflect the new reality.
+
+> **Note:** Always keep the documentation in sync with the code. If `AGENTS.md` contradicts the codebase, update `AGENTS.md`.
+
+---
+
+## 4. High-Level Architecture
+
+### 4.1 Stack Overview
 
 - **Ingestion:** Python worker  
   - **Parsing:** Docling for layout + LlamaParse as a fallback for complex pages.
@@ -48,11 +69,11 @@ Agents must respect these layers and avoid mixing concerns (e.g., no direct DB c
 
 ---
 
-## 4. Coding Principles & Design + TDD Mindset
+## 5. Coding Principles & Design + TDD Mindset
 
 All code written by humans or AI agents must follow these principles.
 
-### 4.1 Single Responsibility & Clear Boundaries
+### 5.1 Single Responsibility & Clear Boundaries
 
 Each module does **one job well**:
 
@@ -82,7 +103,7 @@ Each module does **one job well**:
 
 ---
 
-### 4.2 Dependency Injection (DI)
+### 5.2 Dependency Injection (DI)
 
 Core services receive dependencies via their constructors:
 
@@ -103,7 +124,7 @@ Constraints:
 
 ---
 
-### 4.3 Separation of Concerns & Domain-Agnostic Core
+### 5.3 Separation of Concerns & Domain-Agnostic Core
 
 The core pipeline must be reusable across ESL, STEM, and History.
 
@@ -120,7 +141,7 @@ The core pipeline must be reusable across ESL, STEM, and History.
 
 ---
 
-### 4.4 Pure Logic vs I/O (Ports & Adapters)
+### 5.4 Pure Logic vs I/O (Ports & Adapters)
 
 - **Pure logic modules**
   - Take structured data, return structured data.
@@ -141,7 +162,7 @@ Agents should:
 
 ---
 
-### 4.5 Composition Over Inheritance
+### 5.5 Composition Over Inheritance
 
 - Prefer composing behavior over inheriting from complex base classes.
 - Use small interfaces / ABCs and inject implementations instead of deep inheritance trees.
@@ -153,13 +174,13 @@ Examples:
 
 ---
 
-### 4.6 TDD & Testing Strategy
+### 5.6 TDD & Testing Strategy
 
 We follow a **test-first / test-alongside** mindset:
 
 > Whenever an agent or developer adds or changes behavior, they must add or update tests in the same PR.
 
-#### 4.6.1 Types of Tests
+#### 5.6.1 Types of Tests
 
 - **Unit tests**
   - For pure logic (chunkers, curriculum guard filters, prompt constructors).
@@ -175,7 +196,7 @@ We follow a **test-first / test-alongside** mindset:
     - Check status codes, response shape, and error handling.
     - Use a test DB and a test Redis or in-memory queue.
 
-#### 4.6.2 TDD Workflow (for agents)
+#### 5.6.2 TDD Workflow (for agents)
 
 When implementing a new feature or refactor:
 
@@ -194,11 +215,11 @@ Agents must never introduce non-trivial logic without a corresponding test.
 
 ---
 
-## 5. Database Schema (Universal, LlamaIndex-Compatible)
+## 6. Database Schema (Universal, LlamaIndex-Compatible)
 
 We use a universal schema that separates **structure** from **content atoms**.
 
-### 5.1 Structure Nodes
+### 6.1 Structure Nodes
 
 Hierarchy: `Book → Unit → Section/Lesson → (optional) Subsection`.
 
@@ -219,7 +240,7 @@ CREATE TABLE structure_nodes (
 );
 ```
 
-### 5.2 Content Atoms (LlamaIndex-Managed)
+### 6.2 Content Atoms (LlamaIndex-Managed)
 
 - LlamaIndex manages the vector table (typically named `data_content_atoms` by `PGVectorStore`):
   - Columns: `id`, `text`, `metadata_` (JSONB), `embedding`.
@@ -236,7 +257,7 @@ Agents must ensure:
 
 ---
 
-## 6. Ingestion Architecture
+## 7. Ingestion Architecture
 
 1. **IngestionService**
    - Entry point for ingestion requests.
@@ -259,9 +280,9 @@ Agents must ensure:
 
 ---
 
-## 7. Search & Generation Architecture
+## 8. Search & Generation Architecture
 
-### 7.1 Generic Retrieval (SearchService)
+### 8.1 Generic Retrieval (SearchService)
 
 - `SearchService.search_content(...)`:
   - Returns a list of `AtomHit` objects.
@@ -275,7 +296,7 @@ Agents must ensure:
   - Whether content is ESL, STEM, or History.
   - Whether the atom is text, vocabulary, or image description.
 
-### 7.2 Dynamic Generation (PromptFactory + LLM Client)
+### 8.2 Dynamic Generation (PromptFactory + LLM Client)
 
 - **PromptFactory**
   - Input: `GenerateItemsRequest` with fields like:
@@ -292,7 +313,7 @@ Agents must ensure:
 
 ---
 
-## 8. API & Scaling Architecture
+## 9. API & Scaling Architecture
 
 To handle bursts (e.g., many teachers clicking “Generate”):
 
@@ -319,9 +340,9 @@ Agents must not:
 
 ---
 
-## 9. Curriculum Guard (Sequence Index Filtering)
+## 10. Curriculum Guard (Sequence Index Filtering)
 
-### 9.1 Idea
+### 10.1 Idea
 
 Teachers should only get content up to what has been taught so far.
 
@@ -329,7 +350,7 @@ Teachers should only get content up to what has been taught so far.
   - Each `StructureNode` has a `sequence_index`.
   - This value is denormalized into `ContentAtom.metadata.sequence_index`.
 
-### 9.2 Implementation
+### 10.2 Implementation
 
 1. **Ingestion**
    - When IngestionService creates `ContentAtom`s, it:
@@ -348,13 +369,13 @@ Agents must **always** respect `max_sequence_index` when generating quizzes or e
 
 ---
 
-## 10. Future Scaling Strategy (Post-MVP Partitioning)
+## 11. Future Scaling Strategy (Post-MVP Partitioning)
 
 The MVP uses a single `content_atoms` table, which works well up to ~10M rows / ~500–1,000 textbooks.
 
 When latency grows too high or table size becomes large, we can move to partitioning without changing application code.
 
-### 10.1 Partitioning Pattern (Conceptual)
+### 11.1 Partitioning Pattern (Conceptual)
 
 - Keep `content_atoms` as the logical interface.
 - Use Postgres partitioning by `book_id`:
@@ -386,7 +407,7 @@ Agents must not depend on physical table names; always use the logical `content_
 
 ---
 
-## 11. Style & Readability Guidelines
+## 12. Style & Readability Guidelines
 
 - Prefer **descriptive names**:  
   `extract_vocab_items_from_page` > `process_page`.
@@ -402,6 +423,6 @@ Agents must not depend on physical table names; always use the logical `content_
 This `agents.md` is the contract. Any new service, endpoint, or agent behavior should:
 
 1. Map back to the user stories in Section 2.
-2. Respect the architecture and boundaries in Sections 3–9.
-3. Be implemented with TDD and DI in mind (Section 4).
-4. Keep options open for the future partitioning strategy (Section 10).
+2. Respect the architecture and boundaries in Sections 4–11.
+3. Be implemented with TDD and DI in mind (Section 5).
+4. Keep options open for the future partitioning strategy (Section 11).
