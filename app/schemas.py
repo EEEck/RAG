@@ -73,6 +73,8 @@ class GenerateItemsRequest(BaseModel):
     difficulty: str = "B1"
     context_text: Optional[str] = None # Added for RAG context
     category: str = "language"
+    profile_id: Optional[str] = None
+    use_memory: bool = False
 
 
 class GeneratedItem(BaseModel):

@@ -4,6 +4,7 @@ import os
 import uuid
 from pathlib import Path
 from typing import Dict, Union
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -11,15 +12,30 @@ from pydantic import BaseModel
 from celery.result import AsyncResult
 
 from .config import get_settings
-from .routes import search, concept
+from .routes import search, concept, artifacts
 from .celery_worker import generate_quiz_task
+from .infra.artifact_db import ArtifactRepository
 
 # Load environment variables (expects OPENAI_API_KEY, PG creds in .env)
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
-app = FastAPI(title="ESL RAG Backend", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Ensure DB schema for artifacts
+    try:
+        print("Ensuring Artifact DB schema...")
+        repo = ArtifactRepository()
+        repo.ensure_schema()
+        print("Artifact DB schema verified.")
+    except Exception as e:
+        print(f"Warning: Failed to ensure Artifact DB schema: {e}")
+    yield
+    # Shutdown logic if needed
+
+app = FastAPI(title="ESL RAG Backend", version="0.1.0", lifespan=lifespan)
 app.include_router(search.router)
 app.include_router(concept.router)
+app.include_router(artifacts.router)
 
 
 class QuizRequest(BaseModel):
