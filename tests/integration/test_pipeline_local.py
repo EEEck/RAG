@@ -114,7 +114,9 @@ def test_pipeline_local_integration(sqlite_db_path, storage_context):
     # 5. Perform RAG Search
     # Query for the mock entry
     query = "mock integration test"
-    response = search_service.search_lessons_and_vocab(query, top_lessons=5)
+
+    # NEW: Use search_content instead of search_lessons_and_vocab
+    response = search_service.search_content(query, limit=5)
 
     print("\n--- Search Results ---")
     for atom in response.atoms:
@@ -131,7 +133,7 @@ def test_pipeline_local_integration(sqlite_db_path, storage_context):
 
     # Verify original data also findable
     query_orig = "Greenwich"
-    response_orig = search_service.search_lessons_and_vocab(query_orig, top_lessons=5)
+    response_orig = search_service.search_content(query_orig, limit=5)
 
     print("\n--- Original Data Search Results ---")
     for atom in response_orig.atoms:
