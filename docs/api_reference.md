@@ -12,6 +12,12 @@
 
 ## Ingestion Pipeline
 
+### Ingestion Service (Core)
+
+::: ingest.service
+    options:
+      show_root_heading: true
+
 ### Pipeline Entry Point
 
 ::: ingest.pipeline

@@ -61,9 +61,9 @@ Each module does **one job well**:
     - PDF → structure nodes → content atoms → vector store.
   - Knows **what** should happen in which order, but not **how** each step is implemented.
   - Delegates:
-    - Parsing to ingestors (`HybridIngestor`, etc.).
-    - Persistence to repositories.
-    - Embedding/indexing to vector-store adapters.
+    - Parsing to injected ingestor (default `HybridIngestor`).
+    - Persistence to injected repository (e.g., `StructureNodeRepository`).
+    - Embedding/indexing to injected vector-store adapters.
 
 - **Repositories** (e.g. `StructureNodeRepository`)
   - Own database persistence for a specific aggregate (structure nodes, content atoms, exam configs).
@@ -202,7 +202,10 @@ We use a universal schema that separates **structure** from **content atoms**.
 
 Hierarchy: `Book → Unit → Section/Lesson → (optional) Subsection`.
 
+For the authoritative SQL schema, please refer to `ingest/infra/postgres.py`.
+
 ```sql
+-- See ingest/infra/postgres.py for the full DDL
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE structure_nodes (
@@ -218,8 +221,8 @@ CREATE TABLE structure_nodes (
 
 ### 5.2 Content Atoms (LlamaIndex-Managed)
 
-- LlamaIndex manages a `content_atoms`-like table:
-  - Columns: `id`, `text`, `metadata`, `embedding`.
+- LlamaIndex manages the vector table (typically named `data_content_atoms` by `PGVectorStore`):
+  - Columns: `id`, `text`, `metadata_` (JSONB), `embedding`.
   - Important metadata fields:
     - `book_id`
     - `node_id`
@@ -238,7 +241,7 @@ Agents must ensure:
 1. **IngestionService**
    - Entry point for ingestion requests.
    - Orchestrates:
-     1. Parse with `HybridIngestor` (Docling + LlamaParse fallback).
+     1. Parse with injected Ingestor strategy (default `HybridIngestor`: Docling + LlamaParse fallback).
      2. Build `StructureNode` tree.
      3. Create `ContentAtom` records with proper metadata (`book_id`, `node_id`, `sequence_index`).
      4. Persist structure via `StructureNodeRepository`.
