@@ -85,17 +85,34 @@ class IngestionService:
             if detected_category is None:
                  texts = data.get("texts", [])
                  sample_text = "\n".join([t.get("text", "") for t in texts[:5]])
+                 # We only get category here for logging/return; metadata extraction is inside ingestor
                  detected_category = detect_book_category(os.path.basename(file_path), sample_text)
+
+            # Note: _parse_docling_structure call might need metadata if not handled inside
+            # Ideally Ingestor abstraction handles this.
+            # But the Ingestor interface _parse_docling_structure has been updated in HybridIngestor
+            # but here we are calling it directly via self.ingestor.
+            # If self.ingestor is HybridIngestor, it works. If it's a mock/protocol, we need to check signature.
+            # For JSON, we use _parse_docling_structure.
+
+            # Since we updated HybridIngestor._parse_docling_structure to accept book_metadata,
+            # we should fetch it here or let it default.
+            # But since detect_book_category calls detect_book_metadata under the hood now,
+            # we can't easily get the full metadata object unless we change this call too.
+            # For JSON path (testing usually), defaults are acceptable.
 
             nodes, atoms = self.ingestor._parse_docling_structure(data, book_id, file_path, detected_category)
         else:
             # If category is not provided, the ingestor might detect it internally or default.
-            # However, the current Ingestor interface ingest_book takes category.
-            # If we want to detect BEFORE ingest, we might need to peek at the file.
             # The HybridIngestor does auto-detection internally if category is None.
             nodes, atoms = self.ingestor.ingest_book(str(file_path), book_id, detected_category)
-            # We don't easily get the detected category back from ingest_book in the current signature
-            # unless we inspect the atoms' metadata.
+
+            # Try to retrieve detected category from root node metadata if available
+            root_node = next((n for n in nodes if n.node_level == 0), None)
+            if root_node and isinstance(root_node.meta_data, dict):
+                 detected_category = root_node.meta_data.get("subject", detected_category)
+
+            # Fallback if still None
             if detected_category is None and atoms:
                  # Infer from first atom
                  if hasattr(atoms[0].meta_data, 'category'):

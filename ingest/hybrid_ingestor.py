@@ -15,7 +15,7 @@ from docling.document_converter import DocumentConverter
 from .models import StructureNode, ContentAtom
 from .openai_ingestor import OpenAIIngestor
 from .schemas import LanguageMetadata, STEMMetadata, HistoryMetadata
-from .classification import detect_book_category
+from .classification import detect_book_metadata, detect_book_category
 
 class HybridIngestor:
     """
@@ -56,38 +56,60 @@ class HybridIngestor:
             # Export to dict to analyze structure
             data = doc.document.export_to_dict()
 
-            # Auto-detect category if not provided
+            book_metadata = {}
+            # Auto-detect category and grade level if not provided
             if category is None:
                 # Use first few text blocks to detect
                 texts = data.get("texts", [])
                 sample_text = "\n".join([t.get("text", "") for t in texts[:5]])
                 title = os.path.basename(file_path) # Fallback title
-                category = detect_book_category(title, sample_text)
-                print(f"Detected Category: {category}")
+
+                # Detect metadata (subject + grade_level)
+                metadata_result = detect_book_metadata(title, sample_text)
+                category = metadata_result["subject"]
+                book_metadata = metadata_result
+
+                print(f"Detected Category: {category}, Grade Level: {book_metadata.get('grade_level')}")
+            else:
+                # If category is provided, we might still want to detect grade level or just default
+                # For now, let's try to detect if we have text
+                texts = data.get("texts", [])
+                sample_text = "\n".join([t.get("text", "") for t in texts[:5]])
+                title = os.path.basename(file_path)
+
+                # We re-run detection to get grade level, but override subject
+                detected = detect_book_metadata(title, sample_text)
+                book_metadata = {
+                    "subject": category,
+                    "grade_level": detected.get("grade_level", 1)
+                }
 
             if self._needs_fallback(data):
                 print("Complexity detected. Switching to LlamaParse...")
                 try:
-                    return self.ingest_with_llama(file_path, book_id, category)
+                    return self.ingest_with_llama(file_path, book_id, category, book_metadata)
                 except Exception as e:
                     print(f"LlamaParse failed: {e}. Falling back to OpenAI VLM...")
-                    return self.ingest_with_openai(file_path, book_id, category)
+                    return self.ingest_with_openai(file_path, book_id, category, book_metadata)
 
             # Check if Docling result is empty or poor quality which might indicate handwritten script
             if self._is_poor_quality_or_handwritten(data):
                  print("Docling result poor or handwritten script suspected. Falling back to OpenAI VLM...")
-                 return self.ingest_with_openai(file_path, book_id, category)
+                 return self.ingest_with_openai(file_path, book_id, category, book_metadata)
 
-            return self._parse_docling_structure(data, book_id, file_path, category)
+            return self._parse_docling_structure(data, book_id, file_path, category, book_metadata)
 
         except Exception as e:
             print(f"Docling failed: {e}. Attempting OpenAI VLM fallback...")
             # If Docling totally failed, we can't extract text for detection.
             # Fallback to 'language' or try to detect from OpenAI first page?
-            # For now, default to language if not provided.
             if category is None:
                 category = "language"
-            return self.ingest_with_openai(file_path, book_id, category)
+
+            # Use basic default metadata if we failed early
+            book_metadata = {"subject": category, "grade_level": 1}
+
+            return self.ingest_with_openai(file_path, book_id, category, book_metadata)
 
     def _needs_fallback(self, data) -> bool:
         """
@@ -115,7 +137,7 @@ class HybridIngestor:
             return True
         return False
 
-    def ingest_with_llama(self, file_path: str, book_id: uuid.UUID, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def ingest_with_llama(self, file_path: str, book_id: uuid.UUID, category: str = "language", book_metadata: Dict[str, Any] = None) -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Ingests a book using LlamaParse (Cloud).
         """
@@ -130,6 +152,11 @@ class HybridIngestor:
 
         # Create a root node for the book
         root_id = uuid.uuid4()
+
+        # Ensure metadata is populated
+        if book_metadata is None:
+            book_metadata = {"subject": category, "grade_level": 1}
+
         nodes.append(StructureNode(
             id=root_id,
             book_id=book_id,
@@ -137,7 +164,7 @@ class HybridIngestor:
             node_level=0,
             title="Book Root",
             sequence_index=0,
-            meta_data={}
+            meta_data=book_metadata
         ))
 
         for idx, d in enumerate(documents):
@@ -172,7 +199,7 @@ class HybridIngestor:
 
         return nodes, atoms
 
-    def ingest_with_openai(self, file_path: str, book_id: uuid.UUID, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def ingest_with_openai(self, file_path: str, book_id: uuid.UUID, category: str = "language", book_metadata: Dict[str, Any] = None) -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Ingests a book using OpenAI's Vision Language Model (VLM).
         """
@@ -188,6 +215,13 @@ class HybridIngestor:
 
         # Create a root node for the book
         root_id = uuid.uuid4()
+
+        if book_metadata is None:
+            book_metadata = {"subject": category, "grade_level": 1}
+
+        # Merge source info
+        book_metadata["source"] = "openai-vlm"
+
         nodes.append(StructureNode(
             id=root_id,
             book_id=book_id,
@@ -195,7 +229,7 @@ class HybridIngestor:
             node_level=0,
             title="Book Root (OpenAI)",
             sequence_index=0,
-            meta_data={"source": "openai-vlm"}
+            meta_data=book_metadata
         ))
 
         sequence_counter = 0
@@ -253,7 +287,7 @@ class HybridIngestor:
 
         return nodes, atoms
 
-    def _parse_docling_structure(self, data: Dict, book_id: uuid.UUID, file_path: str, category: str = "language") -> Tuple[List[StructureNode], List[ContentAtom]]:
+    def _parse_docling_structure(self, data: Dict, book_id: uuid.UUID, file_path: str, category: str = "language", book_metadata: Dict[str, Any] = None) -> Tuple[List[StructureNode], List[ContentAtom]]:
         """
         Converts raw Docling JSON output into internal StructureNode and ContentAtom objects.
         """
@@ -265,6 +299,10 @@ class HybridIngestor:
 
         # Root node
         root_id = uuid.uuid4()
+
+        if book_metadata is None:
+            book_metadata = {"subject": category, "grade_level": 1}
+
         nodes.append(StructureNode(
             id=root_id,
             book_id=book_id,
@@ -272,7 +310,7 @@ class HybridIngestor:
             node_level=0,
             title="Book Root",
             sequence_index=0,
-            meta_data={}
+            meta_data=book_metadata
         ))
 
         current_parents = {0: root_id} # level -> id

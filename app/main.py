@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from celery.result import AsyncResult
 
 from .config import get_settings
-from .routes import search, concept, profiles, artifacts
+from .routes import search, concept, profiles, artifacts, books
 from .celery_worker import generate_quiz_task
 from .infra.artifact_db import ArtifactRepository
 
@@ -37,6 +37,7 @@ app.include_router(search.router)
 app.include_router(concept.router)
 app.include_router(profiles.router)
 app.include_router(artifacts.router)
+app.include_router(books.router)
 
 
 class QuizRequest(BaseModel):

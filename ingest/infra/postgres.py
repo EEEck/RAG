@@ -1,7 +1,7 @@
 import os
 import json
 import psycopg
-from typing import List
+from typing import List, Dict, Any, Optional
 from ..models import StructureNode
 from ..interfaces import StructureNodeRepository
 from .connection import get_connection
@@ -78,3 +78,41 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
             with conn.cursor() as cur:
                 cur.executemany(query, data)
             conn.commit()
+
+    def list_books(self, subject: str, level: Optional[int] = None, min_level: Optional[int] = None, max_level: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Lists available books filtering by subject and grade level using JSONB operators.
+        """
+        # Base query for root nodes
+        query = """
+            SELECT book_id, title, meta_data
+            FROM structure_nodes
+            WHERE node_level = 0
+            AND meta_data->>'subject' = %s
+        """
+        params = [subject]
+
+        # Add level filtering
+        if level is not None:
+            query += " AND (meta_data->>'grade_level')::int = %s"
+            params.append(level)
+        elif min_level is not None and max_level is not None:
+            query += " AND (meta_data->>'grade_level')::int BETWEEN %s AND %s"
+            params.append(min_level)
+            params.append(max_level)
+
+        # Limit default to 20 to prevent data dump as per requirements
+        query += " LIMIT 20;"
+
+        books = []
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, params)
+                rows = cur.fetchall()
+                for row in rows:
+                    books.append({
+                        "book_id": str(row[0]),
+                        "title": row[1],
+                        "metadata": row[2]
+                    })
+        return books

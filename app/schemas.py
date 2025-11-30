@@ -5,6 +5,14 @@ from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseModel
 
 
+class BookResponse(BaseModel):
+    id: str
+    title: str
+    subject: str
+    grade_level: int
+    metadata: Dict[str, Any] = {}
+
+
 class SearchRequest(BaseModel):
     query: str
     top_lessons: int = 5
