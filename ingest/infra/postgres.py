@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS teacher_profiles (
     grade_level TEXT,
     pedagogy_config JSONB DEFAULT '{}',
     content_scope JSONB DEFAULT '{}',
+    book_list TEXT[] DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
