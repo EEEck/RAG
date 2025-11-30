@@ -1,0 +1,3 @@
+git+https://github.com/Azure-Samples/ai-rag-chat-evaluator/@2025-06-02
+rich
+python-dotenv
