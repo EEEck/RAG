@@ -100,10 +100,11 @@ def test_pipeline_local_integration(sqlite_db_path, storage_context):
 
     # Run Indexing
     # This now returns the live Index object
+    # MOCKING: We use MockEmbeddings here to avoid OpenAI Key requirement in local/CI environment.
     index = pipeline.index_atoms(
         atoms,
         sequence_map=sequence_map,
-        should_mock_embedding=False, # Use Real OpenAI Embeddings
+        should_mock_embedding=True, # CHANGED: Use MockEmbeddings for local testing without API key
         storage_context=storage_context
     )
 
