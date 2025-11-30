@@ -86,3 +86,27 @@
 **Acceptance Criteria:**
 - [x] Scripts or entry points available to trigger ingestion (via code or potential CLI wrappers).
 **Status:** DONE
+
+---
+
+## 4. API & Discovery Enhancements
+
+### [F1-010] API: List Available Textbooks
+**User Story:** As a teacher, I want to see a list of available textbooks so I can link the correct book to my class profile.
+**Acceptance Criteria:**
+- [ ] Implement `GET /books` endpoint.
+- [ ] Return list of books (ID, Title, Subject, Grade Level) derived from `structure_nodes` (level=0).
+- [ ] Allow optional filtering by subject or grade.
+- [ ] Unit test: Verify endpoint returns unique books from DB.
+**Status:** TODO
+
+### [F1-011] API: Strict Profile-Based Search Scoping
+**User Story:** As a platform owner, I want to enforce that all searches are strictly scoped to a profile's assigned textbook to prevent data leakage.
+**Acceptance Criteria:**
+- [ ] Update `SearchRequest` schema to include optional `book_id` and `profile_id`.
+- [ ] Update `SearchService` (or Route handler) to:
+    - If `profile_id` is provided, fetch the linked `book_id`.
+    - If `book_id` is provided, use it.
+    - If neither is provided, **Reject** the request (or require a strict "admin_override" flag).
+- [ ] Ensure `strict_mode` prevents queries across "all books".
+**Status:** TODO
