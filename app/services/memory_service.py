@@ -1,7 +1,7 @@
 import os
 from typing import List, Optional
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timedelta
 from openai import OpenAI
 
 from app.models.artifact import Artifact
@@ -81,3 +81,17 @@ class MemoryService:
             ))
 
         return hits
+
+    def get_artifacts_in_range(self, profile_id: str, start_date: datetime, end_date: datetime) -> List[Artifact]:
+        """
+        Retrieves artifacts for a profile within a specific date range (inclusive).
+        """
+        return self.repo.get_artifacts_by_date_range(profile_id, start_date, end_date)
+
+    def get_recent_artifacts(self, profile_id: str, days: int = 7) -> List[Artifact]:
+        """
+        Retrieves artifacts from the last N days.
+        """
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+        return self.get_artifacts_in_range(profile_id, start_date, end_date)
