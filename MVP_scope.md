@@ -94,7 +94,7 @@ We are building an AI Teaching Assistant that:
 
 ### 2.2 MVP Goals
 
-- **Feature 1 – Textbook RAG Engine (in progress):**  
+- **Feature 1 – Textbook RAG Engine:**
   Ingest ESL/Science textbooks, enforce curriculum safety (e.g., “up to Unit 3 only”), and generate quizzes/lessons.
 
 - **Feature 2 – Classroom Context / Profile Engine:**  
@@ -102,6 +102,9 @@ We are building an AI Teaching Assistant that:
 
 - **Feature 3 – Curriculum Graph / Memory:**  
   Save generated artifacts (quizzes, lesson plans), track them over time, and use them for cumulative reviews.
+
+- **Feature 4 – User Content Library:**
+  Allow teachers to upload private content (PDFs, manuscripts) that is indexed securely and only accessible to them alongside global textbooks.
 
 ### 2.3 Constraints / Non-Goals (MVP)
 
@@ -249,6 +252,7 @@ CREATE TABLE structure_nodes (
     node_level INTEGER,       -- 0=Book, 1=Unit, 2=Section, 3=Exercise
     title TEXT,
     sequence_index INTEGER,   -- used for curriculum safety; monotonically increasing
+    owner_id TEXT,            -- NULL for global content, user_id for private content
     meta_data JSONB           -- e.g., {"page_start": 10, "page_end": 12}
 );
 ```
@@ -363,6 +367,7 @@ class ArtifactDBModel(SQLModel, table=True):
 - **FR1.3** All retrieval must be **hard-scoped** by:
   - `book_id`
   - `sequence_index ≤ max_sequence_index`
+  - `owner_id` (Privacy: User can only see their own content + Global content)
 - **FR1.4** The platform must support 100 concurrent “Generate” operations using async workers.
 
 #### 7.1.2 Ingestion Architecture
