@@ -60,12 +60,12 @@
 ### [F3-006] API: Artifact Filtering (Timeline View)
 **User Story:** As a teacher, I want to see a timeline of what I've taught, filtered by date and type, so I can plan my next lesson.
 **Acceptance Criteria:**
-- [ ] Update `GET /artifacts` (or create `GET /artifacts/timeline`) to support:
+- [x] Update `GET /artifacts` (or create `GET /artifacts/timeline`) to support:
     -   `start_date`, `end_date` (ISO format).
     -   `artifact_type` (e.g., `quiz`, `lesson`, `vocab`).
-- [ ] Backend: Ensure SQL query handles these filters efficiently.
-- [ ] Return list of lightweight Artifact objects (ID, Date, Type, Title/Summary) sorted by Date DESC.
-**Status:** TODO
+- [x] Backend: Ensure SQL query handles these filters efficiently.
+- [x] Return list of lightweight Artifact objects (ID, Date, Type, Title/Summary) sorted by Date DESC.
+**Status:** DONE
 
 ### [F3-007] Script: End-to-End Review Verification
 **User Story:** As an engineer, I want a script that simulates a teacher's workflow (Teach -> Save -> Review) to verify the system's memory.

@@ -99,14 +99,14 @@ def get_artifact_timeline(
     if not profile_service.get_profile(profile_id):
         raise HTTPException(status_code=404, detail=f"Profile with ID {profile_id} not found.")
 
+    # Parse Dates
     try:
-        # Parse Dates
-        try:
-            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
-            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format. Use ISO 8601 (YYYY-MM-DDTHH:MM:SS)")
+        start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use ISO 8601 (YYYY-MM-DDTHH:MM:SS)")
 
+    try:
         artifacts = service.get_artifacts_in_range(
             profile_id=profile_id,
             start_date=start_dt,
