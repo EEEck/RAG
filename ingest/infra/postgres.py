@@ -19,8 +19,10 @@ CREATE TABLE IF NOT EXISTS structure_nodes (
     node_level INTEGER, -- 0=Book, 1=Unit, 2=Section
     title TEXT,
     sequence_index INTEGER,
-    meta_data JSONB
+    meta_data JSONB,
+    owner_id TEXT -- NULL for global, user_id for private
 );
+CREATE INDEX IF NOT EXISTS idx_structure_nodes_owner_id ON structure_nodes(owner_id);
 
 -- Pedagogy Strategies (Global + User Extensions)
 -- Added owner_id for future user-specific logic
@@ -89,8 +91,8 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
             return
 
         query = """
-        INSERT INTO structure_nodes (id, book_id, parent_id, node_level, title, sequence_index, meta_data)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO structure_nodes (id, book_id, parent_id, node_level, title, sequence_index, meta_data, owner_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (id) DO NOTHING;
         """
         data = [
@@ -101,7 +103,8 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
                 n.node_level,
                 n.title,
                 n.sequence_index,
-                json.dumps(n.meta_data)
+                json.dumps(n.meta_data),
+                n.owner_id
             )
             for n in nodes
         ]

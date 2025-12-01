@@ -31,6 +31,7 @@ class StructureNode:
     title: str
     sequence_index: int
     meta_data: Dict[str, Any]
+    owner_id: Optional[str] = None
 
 
 class ContentAtom(BaseModel):
