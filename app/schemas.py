@@ -113,6 +113,13 @@ class PedagogyConfig(BaseModel):
     adaptation_level: Optional[str] = "standard"
 
 
+class TimelineArtifact(BaseModel):
+    id: str
+    date: str
+    type: str
+    title: str
+
+
 class ContentScope(BaseModel):
     banned_topics: List[str] = []
     preferred_sources: List[str] = []

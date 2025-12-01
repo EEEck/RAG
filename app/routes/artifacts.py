@@ -1,10 +1,11 @@
 from typing import List, Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.services.memory_service import MemoryService
 from app.services.profile_service import ProfileService, get_profile_service
-from app.schemas import AtomHit
+from app.schemas import AtomHit, TimelineArtifact
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
@@ -80,3 +81,50 @@ def list_artifacts(
     else:
         # Search without profile: return empty list as requested for decoupled handling
         return []
+
+
+@router.get("/timeline", response_model=List[TimelineArtifact])
+def get_artifact_timeline(
+    profile_id: str,
+    start_date: str, # ISO Format
+    end_date: str, # ISO Format
+    type: Optional[str] = None,
+    limit: int = 20,
+    service: MemoryService = Depends(get_memory_service),
+    profile_service: ProfileService = Depends(get_profile_service)
+):
+    """
+    Retrieve a timeline of artifacts for a profile, filtered by date range and type.
+    """
+    if not profile_service.get_profile(profile_id):
+        raise HTTPException(status_code=404, detail=f"Profile with ID {profile_id} not found.")
+
+    try:
+        # Parse Dates
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use ISO 8601 (YYYY-MM-DDTHH:MM:SS)")
+
+        artifacts = service.get_artifacts_in_range(
+            profile_id=profile_id,
+            start_date=start_dt,
+            end_date=end_dt,
+            artifact_type=type
+        )
+
+        # Convert to TimelineArtifact
+        timeline = []
+        for art in artifacts[:limit]:
+            timeline.append(TimelineArtifact(
+                id=str(art.id),
+                date=art.created_at.isoformat() if art.created_at else "",
+                type=art.type,
+                title=art.summary or f"{art.type.capitalize()} on {art.created_at.strftime('%Y-%m-%d')}"
+            ))
+
+        return timeline
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
