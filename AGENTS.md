@@ -59,7 +59,9 @@ The backlog is located in `docs/backlog/` and consists of:
 - **Ingestion:** Python worker  
   - **Parsing:** Docling for layout + LlamaParse as a fallback for complex pages.
 - **Vector Store:** LlamaIndex + `PGVectorStore` (PostgreSQL).
-- **Database:** PostgreSQL 16+ with `vector` extension.
+- **Databases:**
+  - **Content DB (`db_content`):** PostgreSQL + `pgvector` (Textbooks, Pedagogy).
+  - **User DB (`db_user`):** PostgreSQL (Profiles, Artifacts).
 - **API Layer:** FastAPI (async).
 - **Async Queue:** Redis (broker) + Celery workers for heavy RAG jobs.
 - **Caching:** Redis (semantic / result cache).
@@ -215,15 +217,17 @@ Agents must never introduce non-trivial logic without a corresponding test.
 
 ---
 
-## 6. Database Schema (Universal, LlamaIndex-Compatible)
+## 6. Database Schema (Split Architecture)
 
-We use a universal schema that separates **structure** from **content atoms**.
+We separate **Static Content** from **User Data**.
 
-### 6.1 Structure Nodes
+### 6.1 Content DB (`db_content`)
 
+Stores the textbook content and pedagogy.
+
+#### 6.1.1 Structure Nodes
 Hierarchy: `Book → Unit → Section/Lesson → (optional) Subsection`.
-
-For the authoritative SQL schema, please refer to `ingest/infra/postgres.py`.
+See `ingest/infra/postgres.py` (content section) for DDL.
 
 ```sql
 -- See ingest/infra/postgres.py for the full DDL
@@ -240,9 +244,9 @@ CREATE TABLE structure_nodes (
 );
 ```
 
-### 6.2 Content Atoms (LlamaIndex-Managed)
+#### 6.1.2 Content Atoms (LlamaIndex-Managed)
 
-- LlamaIndex manages the vector table (typically named `data_content_atoms` by `PGVectorStore`):
+- LlamaIndex manages the vector table in `db_content` (typically named `data_content_atoms` by `PGVectorStore`):
   - Columns: `id`, `text`, `metadata_` (JSONB), `embedding`.
   - Important metadata fields:
     - `book_id`
@@ -254,6 +258,17 @@ Agents must ensure:
 
 - `sequence_index` and `book_id` are always set correctly during ingestion.
 - Metadata contains enough information for domain-specific filtering (e.g., `unit`, `lesson`, `subject`).
+
+#### 6.1.3 Pedagogy Strategies
+- Stores global and user-defined teaching strategies.
+- Columns: `id`, `owner_id` (NULL=Global), `content`, `embedding`...
+
+### 6.2 User DB (`db_user`)
+
+Stores user-specific state.
+
+- **Teacher Profiles:** Settings, active book links.
+- **Class Artifacts:** Generated quizzes, lessons, history (with vector embeddings for memory).
 
 ---
 

@@ -6,8 +6,8 @@ from ..models import StructureNode
 from ..interfaces import StructureNodeRepository
 from .connection import get_connection
 
-# Postgres Schema
-POSTGRES_SCHEMA_SQL = """
+# Postgres Schema - Content DB
+CONTENT_SCHEMA_SQL = """
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- 1. Structure Nodes
@@ -21,7 +21,20 @@ CREATE TABLE IF NOT EXISTS structure_nodes (
     meta_data JSONB
 );
 
--- 2. Teacher Profiles
+-- Pedagogy Strategies (Global + User Extensions)
+-- Added owner_id for future user-specific logic
+CREATE TABLE IF NOT EXISTS pedagogy_strategies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id TEXT, -- NULL for global, user_id for private
+    content TEXT,
+    meta_data JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+"""
+
+# Postgres Schema - User DB
+USER_SCHEMA_SQL = """
+-- 1. Teacher Profiles
 CREATE TABLE IF NOT EXISTS teacher_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id TEXT NOT NULL,
@@ -33,24 +46,41 @@ CREATE TABLE IF NOT EXISTS teacher_profiles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 2. Class Artifacts (Memory)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS class_artifacts (
+    id UUID PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    summary TEXT,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (NOW() AT TIME ZONE 'utc'),
+    embedding vector(1536), -- Assuming OpenAI embeddings
+    related_book_ids JSONB,
+    topic_tags JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_class_artifacts_profile_id ON class_artifacts(profile_id);
 """
 
 class PostgresStructureNodeRepository(StructureNodeRepository):
     """Postgres implementation of StructureNodeRepository using psycopg."""
 
     def __init__(self, host: str = None, dbname: str = None, user: str = None, password: str = None):
-        self.host = host or os.getenv("POSTGRES_HOST", "localhost")
-        self.dbname = dbname or os.getenv("POSTGRES_DB", "rag")
-        self.user = user or os.getenv("POSTGRES_USER", "rag")
-        self.password = password or os.getenv("POSTGRES_PASSWORD", "rag")
+        self.host = host # Rely on connection.py defaults usually
+        self.dbname = dbname
+        self.user = user
+        self.password = password
 
     def get_connection(self) -> psycopg.Connection:
-        return get_connection(self.host, self.dbname, self.user, self.password)
+        # Use content DB
+        return get_connection(self.host, self.dbname, self.user, self.password, db_type="content")
 
     def ensure_schema(self) -> None:
         with self.get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(POSTGRES_SCHEMA_SQL)
+                cur.execute(CONTENT_SCHEMA_SQL)
             conn.commit()
 
     def insert_structure_nodes(self, nodes: List[StructureNode]) -> None:
@@ -117,3 +147,13 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
                         "metadata": row[2]
                     })
         return books
+
+class PostgresUserRepository:
+    """Helper to manage User DB Schema."""
+
+    def ensure_schema(self) -> None:
+        # Use user DB
+        with get_connection(db_type="user") as conn:
+            with conn.cursor() as cur:
+                cur.execute(USER_SCHEMA_SQL)
+            conn.commit()

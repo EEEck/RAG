@@ -32,7 +32,7 @@ class ProfileService:
         RETURNING id, created_at, updated_at;
         """
 
-        with get_connection() as conn:
+        with get_connection(db_type="user") as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, (
                     profile.id,
@@ -59,7 +59,7 @@ class ProfileService:
         """
         query = "SELECT * FROM teacher_profiles WHERE id = %s"
 
-        with get_connection() as conn:
+        with get_connection(db_type="user") as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, (profile_id,))
                 row = cur.fetchone()
@@ -80,7 +80,7 @@ class ProfileService:
             query = "SELECT * FROM teacher_profiles"
             params = ()
 
-        with get_connection() as conn:
+        with get_connection(db_type="user") as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, params)
                 rows = cur.fetchall()
@@ -104,7 +104,7 @@ class ProfileService:
         RETURNING *;
         """
 
-        with get_connection() as conn:
+        with get_connection(db_type="user") as conn:
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(query, (
                     updates.name,

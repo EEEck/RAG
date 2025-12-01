@@ -4,25 +4,7 @@ from typing import List, Optional
 import psycopg
 from app.db import get_conn
 from app.models.artifact import Artifact
-
-# Schema for Artifacts
-ARTIFACTS_SCHEMA_SQL = """
-CREATE EXTENSION IF NOT EXISTS vector;
-
-CREATE TABLE IF NOT EXISTS class_artifacts (
-    id UUID PRIMARY KEY,
-    profile_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    summary TEXT,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT (NOW() AT TIME ZONE 'utc'),
-    embedding vector(1536), -- Assuming OpenAI embeddings
-    related_book_ids JSONB,
-    topic_tags JSONB
-);
-
-CREATE INDEX IF NOT EXISTS idx_class_artifacts_profile_id ON class_artifacts(profile_id);
-"""
+from ingest.infra.postgres import USER_SCHEMA_SQL
 
 class ArtifactRepository:
     """
@@ -32,9 +14,11 @@ class ArtifactRepository:
 
     def ensure_schema(self) -> None:
         """Ensures the artifacts table exists."""
-        with get_conn() as conn:
+        # Use User DB
+        with get_conn(db_type="user") as conn:
             with conn.cursor() as cur:
-                cur.execute(ARTIFACTS_SCHEMA_SQL)
+                # Runs the full user schema (profiles + artifacts)
+                cur.execute(USER_SCHEMA_SQL)
             conn.commit()
 
     def save_artifact(self, artifact: Artifact) -> None:
@@ -61,7 +45,7 @@ class ArtifactRepository:
             json.dumps(artifact.topic_tags)
         )
 
-        with get_conn() as conn:
+        with get_conn(db_type="user") as conn:
             with conn.cursor() as cur:
                 cur.execute(query, data)
             conn.commit()
@@ -93,7 +77,7 @@ class ArtifactRepository:
             params = (profile_id, limit)
 
         artifacts = []
-        with get_conn() as conn:
+        with get_conn(db_type="user") as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
                 rows = cur.fetchall()
@@ -126,7 +110,7 @@ class ArtifactRepository:
         params = (profile_id, start_date, end_date)
 
         artifacts = []
-        with get_conn() as conn:
+        with get_conn(db_type="user") as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
                 rows = cur.fetchall()
