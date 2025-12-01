@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS structure_nodes (
     node_level INTEGER,
     title TEXT,
     sequence_index INTEGER,
-    meta_data TEXT
+    meta_data TEXT,
+    owner_id TEXT
 );
 """
 
@@ -170,8 +171,8 @@ class SQLiteTestDB:
         if not nodes:
             return
         query = """
-        INSERT OR IGNORE INTO structure_nodes (id, book_id, parent_id, node_level, title, sequence_index, meta_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO structure_nodes (id, book_id, parent_id, node_level, title, sequence_index, meta_data, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         data = [
             (
@@ -181,7 +182,8 @@ class SQLiteTestDB:
                 n.node_level,
                 n.title,
                 n.sequence_index,
-                json.dumps(n.meta_data)
+                json.dumps(n.meta_data),
+                n.owner_id
             )
             for n in nodes
         ]
