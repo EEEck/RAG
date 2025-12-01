@@ -61,6 +61,8 @@ The backlog is located in `docs/backlog/` and consists of:
 - **Vector Store:** LlamaIndex + `PGVectorStore` (PostgreSQL).
 - **Databases:**
   - **Content DB (`db_content`):** PostgreSQL + `pgvector` (Textbooks, Pedagogy).
+    - Contains both **Global Content** (e.g. standard textbooks) and **Private User Content**.
+    - Private content is secured via an `owner_id` column on `structure_nodes` and `content_atoms`.
   - **User DB (`db_user`):** PostgreSQL (Profiles, Artifacts).
 - **API Layer:** FastAPI (async).
 - **Async Queue:** Redis (broker) + Celery workers for heavy RAG jobs.
@@ -82,6 +84,7 @@ Each module does **one job well**:
 - **IngestionService (`ingest/service.py`)**
   - Orchestrates the ingestion workflow:
     - PDF → structure nodes → content atoms → vector store.
+    - Handles optional `owner_id` for private content ingestion.
   - Knows **what** should happen in which order, but not **how** each step is implemented.
   - Delegates:
     - Parsing to injected ingestor (default `HybridIngestor`).
@@ -302,6 +305,7 @@ Stores user-specific state.
 - `SearchService.search_content(...)`:
   - Returns a list of `AtomHit` objects.
   - Applies filters:
+    - **Privacy Filter:** `owner_id` is NULL (Global) OR `owner_id` matches current user.
     - `book_id`
     - `sequence_index` <= `max_sequence_index`
     - optional domain filters (`subject`, `atom_type`, etc.)
