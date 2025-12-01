@@ -23,6 +23,7 @@ class StructureNode:
         title (str): Title or heading of the section.
         sequence_index (int): Ordering index within the parent/book.
         meta_data (Dict[str, Any]): Additional metadata (page numbers, providers, etc.).
+        owner_id (Optional[str]): The ID of the user who owns this content. None for global content.
     """
     id: uuid.UUID
     book_id: uuid.UUID
@@ -31,6 +32,7 @@ class StructureNode:
     title: str
     sequence_index: int
     meta_data: Dict[str, Any]
+    owner_id: Optional[str] = None
 
 
 class ContentAtom(BaseModel):
