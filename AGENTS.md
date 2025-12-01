@@ -27,6 +27,7 @@ These stories define what the system must support. Agents should not break these
 | **Admin** | As an admin, I want to upload a PDF (e.g., "Green Line 1") and have it automatically ingested, partitioned, and indexed. | System ingests the book, builds structure nodes, and populates vector indexes with `book_id` in metadata. |
 | **Teacher** | As a teacher, I want to generate a quiz for **Unit 3** that *only* uses vocabulary/grammar from Units 1–3. | Search/generation uses `sequence_index` / unit filters so no content from Unit 4+ appears. |
 | **Teacher** | As a teacher, I want to select my specific textbook profile so I don’t get search results from unrelated books. | API requests are filtered by `book_id` (and possibly `teacher_collection_id`). |
+| **Teacher** | As a teacher, I want the system to adopt my teaching style (e.g., Montessori) based on uploaded guides. | System ingests pedagogy guides into `pedagogy_strategies` and injects relevant instructions into the system prompt. |
 | **System** | As a platform, I need to handle many teachers clicking “Generate” simultaneously without crashing. | Heavy RAG work is offloaded via a queue; users receive a `job_id` and can poll for results. |
 
 ---
@@ -94,6 +95,10 @@ Each module does **one job well**:
   - Encapsulates retrieval logic.
   - Works in terms of domain objects (`ContentAtom`, `AtomHit`) and filter parameters.
   - Does not know about HTTP or UI.
+
+- **PedagogyService** (New)
+  - Handles retrieval and synthesis of pedagogical strategies (`PedagogyStrategy`).
+  - Distinct from content search to keep teaching logic separate from textbook content.
 
 - **PromptFactory**
   - Given a task + domain + context, returns the correct prompt configuration.
@@ -217,7 +222,7 @@ Agents must never introduce non-trivial logic without a corresponding test.
 
 ## 6. Database Schema (Universal, LlamaIndex-Compatible)
 
-We use a universal schema that separates **structure** from **content atoms**.
+We use a universal schema that separates **structure** from **content atoms** and **pedagogical strategies**.
 
 ### 6.1 Structure Nodes
 
@@ -250,6 +255,12 @@ CREATE TABLE structure_nodes (
     - `atom_type` (e.g., `text`, `vocab`, `exercise`, `image_desc`)
     - `sequence_index`
 
+### 6.3 Pedagogy Strategies (Custom)
+
+- Table: `pedagogy_strategies`
+  - Columns: `id`, `title`, `subject`, `min_grade`, `max_grade`, `prompt_injection` (JSON), `embedding` (VECTOR).
+  - Used for storing teaching guides and methodologies separate from textbook content.
+
 Agents must ensure:
 
 - `sequence_index` and `book_id` are always set correctly during ingestion.
@@ -268,13 +279,17 @@ Agents must ensure:
      4. Persist structure via `StructureNodeRepository`.
      5. Push atoms to the vector store via LlamaIndex.
 
-2. **HybridIngestor**
+2. **PedagogyIngestor** (New)
+   - Specialized ingestor for teaching guides.
+   - Parses PDFs, extracts metadata (grade, subject), and stores strategies in `pedagogy_strategies`.
+
+3. **HybridIngestor**
    - Strategy that combines:
      - Docling (layout-aware).
      - LlamaParse (complex tables/regions).
    - Returns structured representations that IngestionService converts into nodes/atoms.
 
-3. **Async Enrichment (Optional)**
+4. **Async Enrichment (Optional)**
    - Post-ingestion tasks (e.g., vision descriptions for images) are triggered as Celery jobs.
    - Output (e.g., `image_desc` atoms) is written as additional `ContentAtom` rows.
 

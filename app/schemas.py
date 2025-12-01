@@ -114,3 +114,15 @@ class TeacherProfile(BaseModel):
     grade_level: Optional[str] = None
     pedagogy_config: PedagogyConfig = PedagogyConfig()
     content_scope: ContentScope = ContentScope()
+
+
+class PedagogyStrategy(BaseModel):
+    id: Optional[str] = None
+    title: str
+    subject: str
+    min_grade: int = 0
+    max_grade: int = 12
+    institution_type: Optional[str] = None
+    prompt_injection: Union[Dict[str, Any], str]
+    summary_for_search: Optional[str] = None # Not always returned to client, but useful
+    # embedding not usually in Pydantic schema for API

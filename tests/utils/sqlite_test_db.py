@@ -7,6 +7,7 @@ from ingest.models import StructureNode
 from ingest.interfaces import StructureNodeRepository
 from app.models.artifact import Artifact
 from app.infra.artifact_db import ArtifactRepository
+from app.schemas import PedagogyStrategy
 
 # --- Schemas ---
 
@@ -49,6 +50,20 @@ CREATE TABLE IF NOT EXISTS class_artifacts (
 );
 """
 
+SQLITE_PEDAGOGY_SCHEMA = """
+CREATE TABLE IF NOT EXISTS pedagogy_strategies (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    subject TEXT,
+    min_grade INTEGER DEFAULT 0,
+    max_grade INTEGER DEFAULT 12,
+    institution_type TEXT,
+    prompt_injection TEXT,
+    embedding TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
 # --- Helpers ---
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
@@ -66,7 +81,7 @@ def cosine_similarity(v1: List[float], v2: List[float]) -> float:
 class SQLiteTestDB:
     """
     A single SQLite database manager that can serve as a repository
-    for StructureNodes, Profiles, and Artifacts during integration tests.
+    for StructureNodes, Profiles, Artifacts, and Pedagogy during integration tests.
     """
 
     def __init__(self, db_path: str = ":memory:"):
@@ -82,6 +97,7 @@ class SQLiteTestDB:
             conn.executescript(SQLITE_STRUCTURE_NODES_SCHEMA)
             conn.executescript(SQLITE_TEACHER_PROFILES_SCHEMA)
             conn.executescript(SQLITE_ARTIFACTS_SCHEMA)
+            conn.executescript(SQLITE_PEDAGOGY_SCHEMA)
             conn.commit()
 
     # --- Structure Node Methods ---
@@ -212,4 +228,80 @@ class SQLiteTestDB:
             pass
 
         # Return just the artifacts, limited
+        return [r[1] for r in results[:limit]]
+
+    # --- Pedagogy Methods (Mimicking PedagogyService DB Logic) ---
+
+    def insert_pedagogy_strategy(self, strategy: PedagogyStrategy, embedding: List[float]) -> None:
+        query = """
+        INSERT OR REPLACE INTO pedagogy_strategies (
+            id, title, subject, min_grade, max_grade, institution_type, prompt_injection, embedding
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+        injection_json = json.dumps(strategy.prompt_injection) if isinstance(strategy.prompt_injection, (dict, list)) else json.dumps(strategy.prompt_injection)
+
+        data = (
+            strategy.id,
+            strategy.title,
+            strategy.subject,
+            strategy.min_grade,
+            strategy.max_grade,
+            strategy.institution_type,
+            injection_json,
+            json.dumps(embedding)
+        )
+
+        with self.get_connection() as conn:
+            conn.execute(query, data)
+            conn.commit()
+
+    def search_pedagogy_strategies(self, query_embedding: List[float], subject: Optional[str] = None, grade: Optional[int] = None, limit: int = 3) -> List[PedagogyStrategy]:
+        """
+        Searches strategies with in-memory vector similarity.
+        """
+        sql = "SELECT id, title, subject, min_grade, max_grade, institution_type, prompt_injection, embedding FROM pedagogy_strategies WHERE 1=1"
+        params = []
+
+        if subject:
+            sql += " AND subject = ?"
+            params.append(subject)
+
+        if grade is not None:
+            sql += " AND min_grade <= ? AND max_grade >= ?"
+            params.append(grade)
+            params.append(grade)
+
+        results = []
+        with self.get_connection() as conn:
+            cur = conn.execute(sql, tuple(params))
+            rows = cur.fetchall()
+
+            for row in rows:
+                emb = json.loads(row[7]) if row[7] else []
+
+                # Deserialization of prompt_injection
+                prompt_injection = row[6]
+                try:
+                    prompt_injection = json.loads(prompt_injection)
+                except:
+                    pass
+
+                strategy = PedagogyStrategy(
+                    id=row[0],
+                    title=row[1],
+                    subject=row[2],
+                    min_grade=row[3],
+                    max_grade=row[4],
+                    institution_type=row[5],
+                    prompt_injection=prompt_injection,
+                    summary_for_search="" # Not stored separately in this mock, could be inferred
+                )
+
+                sim = cosine_similarity(query_embedding, emb) if query_embedding and emb else 0.0
+                results.append((sim, strategy))
+
+        # Sort by similarity
+        results.sort(key=lambda x: x[0], reverse=True)
+
         return [r[1] for r in results[:limit]]

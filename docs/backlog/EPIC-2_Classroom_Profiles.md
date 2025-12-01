@@ -52,7 +52,39 @@
 
 ---
 
-## 3. UI & Usage
+## 3. Pedagogy Intelligence (New)
+
+### [F2-007] Pedagogy Strategy Database
+**User Story:** As a system, I need a database to store pedagogical guides (e.g., "Lehrplan", "Teaching Methods") distinct from textbooks.
+**Acceptance Criteria:**
+- [ ] Create `pedagogy_strategies` table with fields: `subject`, `min_grade`, `max_grade`, `institution_type`, `prompt_injection`, `embedding`.
+- [ ] Add `PedagogyStrategy` Pydantic model.
+**Status:** TODO
+
+### [F2-008] Pedagogy Ingestion
+**User Story:** As an admin, I want to ingest PDF teaching guides so they can be searched.
+**Acceptance Criteria:**
+- [ ] Implement `ingest_pedagogy_guide` to parse PDF.
+- [ ] Extract metadata (Grade, Subject) via LLM.
+- [ ] Embed summary and save to DB.
+**Status:** TODO
+
+### [F2-009] Pedagogy Search & Prompt Synthesis
+**User Story:** As a teacher, I want the system to suggest a teaching style based on my class context (Grade 5 English).
+**Acceptance Criteria:**
+- [ ] Implement search by metadata + vector similarity.
+- [ ] Implement `generate_system_prompt` to synthesize multiple strategies into one prompt.
+**Status:** TODO
+
+### [F2-010] Profile Wizard Notebook
+**User Story:** As a developer/user, I want an interactive notebook to demo the "Profile Setup" flow.
+**Acceptance Criteria:**
+- [ ] Notebook: Ingest Guide -> Search Context -> Refine Prompt -> Save Profile.
+**Status:** TODO
+
+---
+
+## 4. UI & Usage
 
 ### [F2-006] Profile Switcher
 **User Story:** As a teacher, I want to easily switch between profiles (e.g., Grade 2 Math -> Grade 8 Physics).

@@ -32,6 +32,19 @@ CREATE TABLE IF NOT EXISTS teacher_profiles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- 3. Pedagogy Strategies
+CREATE TABLE IF NOT EXISTS pedagogy_strategies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    subject TEXT,
+    min_grade INTEGER DEFAULT 0,
+    max_grade INTEGER DEFAULT 12,
+    institution_type TEXT,
+    prompt_injection JSONB,
+    embedding VECTOR(1536),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 """
 
 class PostgresStructureNodeRepository(StructureNodeRepository):
