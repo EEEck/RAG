@@ -30,8 +30,16 @@ class SearchService:
         user_id: str | None = None,
     ) -> SearchResponse:
         """
-        Searches for content atoms using LlamaIndex with optional Curriculum Guard.
+        Searches for content atoms using LlamaIndex with optional Curriculum Guard and Privacy Filters.
         Returns generic AtomHit objects.
+
+        Args:
+            query (str): The search query.
+            limit (int): Max number of results.
+            max_unit (int | None): (Legacy) Limit results to unit <= max_unit.
+            max_sequence_index (int | None): Strict curriculum guard. Limit results to sequence_index <= max.
+            book_ids (List[str] | None): Restrict search to specific book IDs.
+            user_id (str | None): The ID of the requesting user. Used to enforce privacy (User Content + Global).
         """
 
         # Build Filters

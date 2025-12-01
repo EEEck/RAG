@@ -10,6 +10,10 @@ from app.schemas import AtomHit
 from app.config import get_settings
 
 class MemoryService:
+    """
+    Service for managing Curriculum Memory (Artifacts).
+    Handles saving generated content and semantic/temporal retrieval.
+    """
     def __init__(self, repo: ArtifactRepository = None):
         self.repo = repo or ArtifactRepository()
         settings = get_settings()
@@ -33,6 +37,17 @@ class MemoryService:
                       topic_tags: List[str] = []) -> Artifact:
         """
         Creates and saves an artifact. Generates embedding from summary (or content if summary is missing).
+
+        Args:
+            profile_id (str): The ID of the profile this artifact belongs to.
+            content (str): The main content (e.g. quiz text).
+            artifact_type (str): Type of artifact (quiz, lesson, etc).
+            summary (str): Optional summary for better embedding.
+            related_book_ids (List[str]): Books used to generate this.
+            topic_tags (List[str]): Extracted topics.
+
+        Returns:
+            Artifact: The saved artifact object.
         """
         text_to_embed = summary if summary else content[:1000] # Fallback to content snippet
         embedding = self._get_embedding(text_to_embed)
@@ -55,6 +70,14 @@ class MemoryService:
     def search_artifacts(self, profile_id: str, query: str = None, limit: int = 5) -> List[AtomHit]:
         """
         Searches for artifacts and returns them as generic AtomHit objects.
+
+        Args:
+            profile_id (str): The profile to restrict search to.
+            query (str): The semantic query string.
+            limit (int): Max results.
+
+        Returns:
+            List[AtomHit]: Search results formatted for RAG context.
         """
         query_embedding = None
         if query:
@@ -85,6 +108,15 @@ class MemoryService:
     def get_artifacts_in_range(self, profile_id: str, start_date: datetime, end_date: datetime, artifact_type: Optional[str] = None) -> List[Artifact]:
         """
         Retrieves artifacts for a profile within a specific date range (inclusive).
+
+        Args:
+            profile_id (str): The profile ID.
+            start_date (datetime): Start of the range.
+            end_date (datetime): End of the range.
+            artifact_type (Optional[str]): Filter by type (e.g., 'quiz').
+
+        Returns:
+            List[Artifact]: List of matching artifacts.
         """
         return self.repo.get_artifacts_by_date_range(profile_id, start_date, end_date, artifact_type=artifact_type)
 

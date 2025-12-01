@@ -19,6 +19,12 @@ class ProfileService:
     def create_profile(self, profile: TeacherProfile) -> TeacherProfile:
         """
         Creates a new teacher profile in the database.
+
+        Args:
+            profile (TeacherProfile): The profile object to create.
+
+        Returns:
+            TeacherProfile: The created profile with ID (if not provided).
         """
         # If ID is not provided, generate one (though DB default also works,
         # providing it here ensures we return it consistent with model)
@@ -56,6 +62,12 @@ class ProfileService:
     def get_profile(self, profile_id: str) -> Optional[TeacherProfile]:
         """
         Retrieves a profile by ID.
+
+        Args:
+            profile_id (str): The unique ID of the profile.
+
+        Returns:
+            Optional[TeacherProfile]: The profile object or None if not found.
         """
         query = "SELECT * FROM teacher_profiles WHERE id = %s"
 
@@ -72,6 +84,12 @@ class ProfileService:
     def list_profiles(self, user_id: Optional[str] = None) -> List[TeacherProfile]:
         """
         Lists profiles, optionally filtered by user_id.
+
+        Args:
+            user_id (Optional[str]): If provided, only returns profiles owned by this user.
+
+        Returns:
+            List[TeacherProfile]: A list of matching profiles.
         """
         if user_id:
             query = "SELECT * FROM teacher_profiles WHERE user_id = %s"
@@ -90,6 +108,13 @@ class ProfileService:
     def update_profile(self, profile_id: str, updates: TeacherProfile) -> Optional[TeacherProfile]:
         """
         Updates an existing profile.
+
+        Args:
+            profile_id (str): The ID of the profile to update.
+            updates (TeacherProfile): The new profile data (replaces existing).
+
+        Returns:
+            Optional[TeacherProfile]: The updated profile or None if not found.
         """
         # Note: We overwrite the config/scope completely with the new value
         query = """

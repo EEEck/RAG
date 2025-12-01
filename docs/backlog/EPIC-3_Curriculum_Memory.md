@@ -1,6 +1,6 @@
 # EPIC-3: Curriculum Graph / Memory
 
-**Status:** In Progress
+**Status:** Done
 **Owner:** Engineering Team
 **Goal:** Track what has been taught (quizzes, lesson plans) and use it for cumulative reviews and exams.
 
@@ -70,12 +70,12 @@
 ### [F3-007] Script: End-to-End Review Verification
 **User Story:** As an engineer, I want a script that simulates a teacher's workflow (Teach -> Save -> Review) to verify the system's memory.
 **Acceptance Criteria:**
-- [ ] Create `docs/demo_review_workflow.py`.
-- [ ] Steps to implement:
+- [x] Create `docs/demo_review_workflow.py`.
+- [x] Steps to implement:
     1.  **Teach:** Generate a lesson on "Photosynthesis" (Topic A).
     2.  **Save:** Save it as an artifact with a specific timestamp (mocked if needed).
     3.  **Teach:** Generate a lesson on "Cellular Respiration" (Topic B).
     4.  **Save:** Save it.
     5.  **Review:** Call the new "Review Mode" logic for "last 7 days".
     6.  **Assert:** The generated review contains questions about *both* Photosynthesis and Respiration.
-**Status:** TODO
+**Status:** DONE

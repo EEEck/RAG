@@ -7,7 +7,7 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
 ### Core Components
 
 1.  **FastAPI Service (`app/`)**:
-    *   Exposes endpoints for Search (`/search`), Concept Retrieval (`/concept`), and Quiz Generation (`/generate/quiz`).
+    *   Exposes endpoints for Search (`/search`), Concept Retrieval (`/concept`), Quiz Generation (`/generate/quiz`), and Private Ingestion (`/ingest`).
     *   **RAG Orchestrator**: Bridges the gap between retrieval and generation. It fetches context from the search service and injects it into the generation prompt.
 
 2.  **Ingestion Engine (`ingest/`)**:
@@ -40,12 +40,14 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
     *   **Memory Service**: Indexes these artifacts using vector embeddings (`pgvector`) to enable semantic search over past teaching material ("What did I teach last week?").
     *   **Hybrid Search**: Combines SQL filtering (by profile, date) with vector similarity search to retrieve relevant past content for cumulative reviews.
 
-7.  **Data Storage**:
-    *   **PostgreSQL**:
-        *   `structure_nodes` table: Stores hierarchy.
-        *   `data_content_atoms` table (LlamaIndex managed): Stores text/image chunks and vectors (via `pgvector`) and JSONB metadata (`metadata_`).
-        *   `teacher_profiles` table: Stores profile configuration.
-        *   `class_artifacts` table: Stores generated artifacts and their embeddings.
+7.  **Data Storage (Split Architecture)**:
+    *   **Content DB (`db_content`)**:
+        *   Read-mostly database for static educational content.
+        *   Tables: `structure_nodes` (with `owner_id`), `data_content_atoms` (LlamaIndex managed), `pedagogy_strategies`.
+        *   **Unified Content**: Stores both global (public) textbooks and user-uploaded private content. Private content is secured via the `owner_id` column.
+    *   **User DB (`db_user`)**:
+        *   Read-write database for user-specific data.
+        *   Tables: `teacher_profiles`, `class_artifacts`.
     *   **Redis**: Used as the message broker for Celery and result backend for async jobs.
 
 ---
@@ -54,6 +56,7 @@ The ESL RAG Backend is designed to ingest educational content (textbooks, PDF do
 
 1.  **Curriculum Guard (Filtering)**:
     *   Queries are first filtered by `book_id` and strict curriculum boundaries (e.g., `sequence_index` or `unit`).
+    *   **Privacy Guard**: Queries are also filtered by `owner_id` to ensure users only see global content (NULL) or their own private content.
     *   This is enforced using LlamaIndex `MetadataFilters`.
     *   **Optimization**: A specific GIN Index on the `metadata_` column in Postgres is required to ensure these filters remain fast as the dataset grows.
 
