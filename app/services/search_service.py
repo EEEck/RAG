@@ -7,7 +7,7 @@ from llama_index.core import VectorStoreIndex
 from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.core.embeddings import MockEmbedding
 from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.core.vector_stores.types import MetadataFilters, MetadataFilter, FilterOperator
+from llama_index.core.vector_stores.types import MetadataFilters, MetadataFilter, FilterOperator, FilterCondition
 
 from ..schemas import LessonHit, VocabHit, AtomHit, SearchResponse
 
@@ -27,6 +27,7 @@ class SearchService:
         max_unit: int | None = None,
         max_sequence_index: int | None = None,
         book_ids: List[str] | None = None,
+        user_id: str | None = None,
     ) -> SearchResponse:
         """
         Searches for content atoms using LlamaIndex with optional Curriculum Guard.
@@ -35,6 +36,24 @@ class SearchService:
 
         # Build Filters
         filters_list = []
+
+        # Privacy Filter
+        if user_id:
+            # Match User OR Global (missing owner_id)
+            filters_list.append(
+                MetadataFilters(
+                    filters=[
+                        MetadataFilter(key="owner_id", value=user_id, operator=FilterOperator.EQ),
+                        MetadataFilter(key="owner_id", value=None, operator=FilterOperator.IS_EMPTY),
+                    ],
+                    condition=FilterCondition.OR
+                )
+            )
+        else:
+            # Global only (missing owner_id)
+            filters_list.append(
+                MetadataFilter(key="owner_id", value=None, operator=FilterOperator.IS_EMPTY)
+            )
 
         if book_ids:
             if len(book_ids) == 1:

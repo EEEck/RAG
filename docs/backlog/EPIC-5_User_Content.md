@@ -14,7 +14,7 @@ Enable teachers to upload private content (manuscripts, scanned textbooks, PDFs)
 ## User Stories
 
 ### [USER-001] Database Schema Migration
-**Status:** 🔴 **TODO**
+**Status:** 🟢 **DONE**
 **Priority:** High
 **Description:**
 Update the `db_content` schema to support ownership tracking on structure nodes.
@@ -26,7 +26,7 @@ Update the `db_content` schema to support ownership tracking on structure nodes.
   - Database migration script (or update to `ingest/infra/postgres.py`) is verified.
 
 ### [USER-002] Ingestion Service Updates
-**Status:** 🔴 **TODO**
+**Status:** 🟢 **DONE**
 **Priority:** High
 **Description:**
 Update the ingestion logic to propagate ownership information from the entry point down to the vector store.
