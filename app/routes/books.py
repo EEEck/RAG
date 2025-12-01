@@ -2,6 +2,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 
 from app.schemas import BookResponse
+from app.constants import SubjectCategory, STANDARD_SUBJECTS
 from ingest.infra.postgres import PostgresStructureNodeRepository
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -11,7 +12,8 @@ def get_structure_repo():
 
 @router.get("/", response_model=List[BookResponse])
 def list_books(
-    subject: str = Query(..., description="The mandatory subject of the book (e.g. language, stem, history)"),
+    subject: SubjectCategory = Query(..., description="The subject category to filter by. 'other' includes all non-standard subjects."),
+    title: Optional[str] = Query(None, description="Optional partial or fuzzy title search."),
     level: Optional[int] = Query(None, description="Exact grade level to filter by"),
     min_level: Optional[int] = Query(None, description="Minimum grade level range"),
     max_level: Optional[int] = Query(None, description="Maximum grade level range"),
@@ -33,7 +35,18 @@ def list_books(
         )
 
     try:
-        books_data = repo.list_books(subject=subject, level=level, min_level=min_level, max_level=max_level)
+        # Pass the exclusion list explicitly to the repository to avoid coupling Repos to App Constants if possible,
+        # but here we'll let the Repo use the exclusion list logic.
+        # Actually, let's pass the list of exclusions if subject is OTHER.
+
+        books_data = repo.list_books(
+            subject=subject.value,
+            title=title,
+            level=level,
+            min_level=min_level,
+            max_level=max_level,
+            excluded_subjects=list(STANDARD_SUBJECTS) if subject == SubjectCategory.OTHER else None
+        )
 
         response = []
         for b in books_data:
