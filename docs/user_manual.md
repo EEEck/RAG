@@ -12,6 +12,8 @@ This guide describes how to operate the ESL RAG Backend, including starting serv
     POSTGRES_USER=rag
     POSTGRES_PASSWORD=rag
     POSTGRES_DB=rag
+    POSTGRES_CONTENT_HOST=db_content
+    POSTGRES_USER_HOST=db_user
     ```
 
 ### Starting the System
@@ -23,7 +25,8 @@ docker-compose up --build -d
 
 This starts:
 *   **App Service**: The FastAPI backend (Port 8000).
-*   **DB Service**: PostgreSQL with pgvector (Port 5432).
+*   **DB Content Service**: PostgreSQL for Textbooks/Pedagogy (Port 5432).
+*   **DB User Service**: PostgreSQL for Profiles/Artifacts (Port 5433).
 *   **Redis**: For task queues.
 *   **Worker**: Celery worker for background jobs.
 
@@ -35,11 +38,12 @@ curl http://localhost:8000/health
 
 ## 2. Ingesting Documents
 
-Ingestion is currently triggered via script or code (API endpoint for ingestion is pending in `main.py`).
+You can ingest documents globally (admin) or privately (teacher).
 
-**To run ingestion manually:**
+### Option A: Manual Global Ingestion (Admin)
+To add a textbook for **everyone** to use:
 
-1.  Enter the app container (or run locally if Python env is set up):
+1.  Enter the app container:
     ```bash
     docker-compose exec app bash
     ```
@@ -47,7 +51,21 @@ Ingestion is currently triggered via script or code (API endpoint for ingestion 
     ```python
     python -m ingest.pipeline
     ```
-    *(Note: You may need to modify the `__main__` block in `ingest/pipeline.py` or use a custom script to point to your specific PDF file).*
+    *(Note: Modify `ingest/pipeline.py` or use a CLI wrapper to target your specific PDF).*
+
+### Option B: Private Ingestion (Teacher)
+Teachers can upload their own content which remains private to them.
+
+**Endpoint:** `POST /ingest`
+
+**Example Request:**
+```bash
+curl -X POST "http://localhost:8000/ingest/" \
+     -F "file=@/path/to/my_private_notes.pdf" \
+     -F "user_id=teacher_123"
+```
+*   **file**: The PDF document.
+*   **user_id**: The ID of the teacher. This ensures the content is only searchable by `teacher_123`.
 
 ## 3. Managing Classroom Profiles
 
@@ -97,6 +115,7 @@ After generating a quiz or lesson plan that you want to keep, send it to `POST /
 To find past materials, use `GET /artifacts`.
 *   **Filter by Profile**: `?profile_id=...`
 *   **Semantic Search**: `?query=photosynthesis` (finds conceptually related past items)
+*   **Timeline View**: `GET /artifacts/timeline?start_date=...&end_date=...`
 
 ## 5. Monitoring & Management
 
@@ -118,7 +137,7 @@ docker-compose logs -f worker
 ## 6. Troubleshooting
 
 *   **Database Connection Failed**:
-    *   Ensure the `db` container is healthy.
+    *   Ensure the `db_content` and `db_user` containers are healthy.
     *   Check `.env` credentials match `docker-compose.yml`.
 *   **OpenAI Errors**:
     *   Verify `OPENAI_API_KEY` is valid and has credits.

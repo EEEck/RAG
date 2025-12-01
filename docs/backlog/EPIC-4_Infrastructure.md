@@ -1,6 +1,6 @@
 # EPIC-4: Infrastructure & Hosting (Split Architecture)
 
-**Status:** 🟢 Done
+**Status:** Done
 **Owner:** DevOps / Lead Engineer
 
 ## Goal

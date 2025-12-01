@@ -1,6 +1,6 @@
 # EPIC-5: User Content Library
 
-**Status:** 🟡 **In Progress**
+**Status:** Done
 
 ## Overview
 Enable teachers to upload private content (manuscripts, scanned textbooks, PDFs) that is indexed alongside global content but remains strictly private to the uploader. This utilizes a "Unified Content DB" architecture where user content lives in `db_content` but is secured via an `owner_id` column.
@@ -38,7 +38,7 @@ Update the ingestion logic to propagate ownership information from the entry poi
   - `structure_nodes` rows have the correct `owner_id`.
 
 ### [USER-003] Search Service Privacy Enforcement
-**Status:** 🔴 **TODO**
+**Status:** 🟢 **DONE**
 **Priority:** Critical
 **Description:**
 Ensure that search results never leak private content to unauthorized users.
@@ -50,7 +50,7 @@ Ensure that search results never leak private content to unauthorized users.
   - Search as User A DOES return Global content + User A's content.
 
 ### [USER-004] User Ingestion API
-**Status:** 🔴 **TODO**
+**Status:** 🟢 **DONE**
 **Priority:** Medium
 **Description:**
 Expose a simple API endpoint for uploading content, intended for admin-assisted or self-serve use.

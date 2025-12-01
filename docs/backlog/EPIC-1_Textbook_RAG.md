@@ -1,6 +1,6 @@
 # EPIC-1: Scalable Textbook RAG Engine
 
-**Status:** In Progress
+**Status:** Done
 **Owner:** Engineering Team
 **Goal:** Ingest ESL/Science textbooks, enforce curriculum safety (e.g., “up to Unit 3 only”), and generate quizzes/lessons.
 

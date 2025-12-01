@@ -28,6 +28,16 @@ class IngestionService:
         storage_context: Optional[StorageContext] = None,
         should_mock_embedding: bool = False
     ):
+        """
+        Initializes the IngestionService.
+
+        Args:
+            structure_repo (StructureNodeRepository): Repository for storing structure nodes.
+            ingestor (Ingestor): The strategy for parsing documents (e.g., HybridIngestor).
+            vector_store (Optional[Any]): The vector store instance. Defaults to PGVectorStore if None.
+            storage_context (Optional[StorageContext]): LlamaIndex storage context.
+            should_mock_embedding (bool): If True, uses MockEmbedding instead of OpenAI.
+        """
         self.structure_repo = structure_repo
         self.ingestor = ingestor
         self.vector_store = vector_store
@@ -43,6 +53,12 @@ class IngestionService:
     ) -> None:
         """
         Main entry point for ingesting a book.
+
+        Args:
+            file_path (str): Path to the PDF or JSON file.
+            book_id (Optional[uuid.UUID]): The ID to assign to the book. Generated if not provided.
+            category (Optional[str]): Explicit book category (e.g., 'STEM', 'History'). Auto-detected if None.
+            owner_id (Optional[str]): The ID of the user who owns this content. If provided, content is private.
         """
         if book_id is None:
             book_id = uuid.uuid4()
