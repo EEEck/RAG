@@ -1,7 +1,7 @@
 import uuid
 import pytest
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
 from app.models.artifact import Artifact
 from tests.utils.sqlite_test_db import SQLiteTestDB
@@ -111,3 +111,56 @@ def test_artifact_isolation(memory_service, sqlite_db):
     hits_b = memory_service.search_artifacts(p2, query="Secret", limit=10)
     assert len(hits_b) == 1
     assert "Secret B" in hits_b[0].content
+
+
+def test_timeline_filtering(memory_service, sqlite_db):
+    """Test filtering artifacts by date range and type."""
+    profile_id = "teacher_timeline"
+    base_time = datetime(2023, 10, 10, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Helper to save artifact
+    def save_art(type_, offset_days, content):
+        created_at = base_time + timedelta(days=offset_days)
+        art = Artifact(
+            id=uuid.uuid4(), profile_id=profile_id, type=type_, content=content,
+            created_at=created_at, embedding=[], related_book_ids=[], topic_tags=[]
+        )
+        sqlite_db.save_artifact(art)
+
+    # Create artifacts
+    save_art("lesson", -10, "Old Lesson")
+    save_art("lesson", -2, "Recent Lesson")
+    save_art("quiz", -2, "Recent Quiz")
+    save_art("lesson", 0, "Today Lesson")
+    save_art("lesson", 5, "Future Lesson")
+
+    # 1. Test Date Range (Past 5 days)
+    start_date = base_time - timedelta(days=5)
+    end_date = base_time
+
+    # Search via service
+    results = memory_service.get_artifacts_in_range(profile_id, start_date, end_date)
+    # Should get: Recent Lesson, Recent Quiz, Today Lesson (3 total)
+    assert len(results) == 3
+    titles = [r.content for r in results]
+    assert "Recent Lesson" in titles
+    assert "Recent Quiz" in titles
+    assert "Today Lesson" in titles
+    assert "Old Lesson" not in titles
+    assert "Future Lesson" not in titles
+
+    # 2. Test Type Filtering
+    results_lessons = memory_service.get_artifacts_in_range(
+        profile_id, start_date, end_date, artifact_type="lesson"
+    )
+    # Should get: Recent Lesson, Today Lesson (2 total)
+    assert len(results_lessons) == 2
+    for r in results_lessons:
+        assert r.type == "lesson"
+
+    results_quiz = memory_service.get_artifacts_in_range(
+        profile_id, start_date, end_date, artifact_type="quiz"
+    )
+    # Should get: Recent Quiz (1 total)
+    assert len(results_quiz) == 1
+    assert results_quiz[0].content == "Recent Quiz"

@@ -111,7 +111,7 @@ class ArtifactRepository:
                     ))
         return artifacts
 
-    def get_artifacts_by_date_range(self, profile_id: str, start_date: datetime, end_date: datetime) -> List[Artifact]:
+    def get_artifacts_by_date_range(self, profile_id: str, start_date: datetime, end_date: datetime, artifact_type: Optional[str] = None) -> List[Artifact]:
         """
         Retrieves artifacts for a profile within a specific date range (inclusive).
         """
@@ -121,14 +121,19 @@ class ArtifactRepository:
         WHERE profile_id = %s
           AND created_at >= %s
           AND created_at <= %s
-        ORDER BY created_at DESC;
         """
-        params = (profile_id, start_date, end_date)
+        params = [profile_id, start_date, end_date]
+
+        if artifact_type:
+            query += " AND type = %s"
+            params.append(artifact_type)
+
+        query += " ORDER BY created_at DESC;"
 
         artifacts = []
         with get_conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(query, params)
+                cur.execute(query, tuple(params))
                 rows = cur.fetchall()
                 for row in rows:
                     artifacts.append(Artifact(

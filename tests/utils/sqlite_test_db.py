@@ -2,6 +2,7 @@ import sqlite3
 import json
 import uuid
 import math
+from datetime import datetime
 from typing import List, Optional, Any
 from ingest.models import StructureNode
 from ingest.interfaces import StructureNodeRepository
@@ -303,3 +304,50 @@ class SQLiteTestDB:
 
         # Return just the artifacts, limited
         return [r[1] for r in results[:limit]]
+
+    def get_artifacts_by_date_range(self, profile_id: str, start_date: datetime, end_date: datetime, artifact_type: Optional[str] = None) -> List[Artifact]:
+        """
+        Retrieves artifacts for a profile within a specific date range (inclusive).
+        """
+        s_iso = start_date.isoformat()
+        e_iso = end_date.isoformat()
+
+        query = """
+        SELECT id, profile_id, type, content, summary, created_at, embedding, related_book_ids, topic_tags
+        FROM class_artifacts
+        WHERE profile_id = ?
+          AND created_at >= ?
+          AND created_at <= ?
+        """
+        params = [profile_id, s_iso, e_iso]
+
+        if artifact_type:
+            query += " AND type = ?"
+            params.append(artifact_type)
+
+        query += " ORDER BY created_at DESC"
+
+        artifacts = []
+        conn_wrapper = self.get_connection()
+        with conn_wrapper.conn as conn:
+            cur = conn.execute(query, tuple(params))
+            rows = cur.fetchall()
+            for row in rows:
+                # Handle created_at. It might be stored as string in SQLite
+                created_at_val = row[5]
+                if isinstance(created_at_val, str):
+                    created_at_dt = datetime.fromisoformat(created_at_val)
+                else:
+                    created_at_dt = created_at_val
+
+                artifacts.append(Artifact(
+                    id=uuid.UUID(row[0]),
+                    profile_id=row[1],
+                    type=row[2],
+                    content=row[3],
+                    summary=row[4],
+                    created_at=created_at_dt,
+                    related_book_ids=json.loads(row[7]) if row[7] else [],
+                    topic_tags=json.loads(row[8]) if row[8] else []
+                ))
+        return artifacts

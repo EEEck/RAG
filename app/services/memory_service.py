@@ -82,11 +82,11 @@ class MemoryService:
 
         return hits
 
-    def get_artifacts_in_range(self, profile_id: str, start_date: datetime, end_date: datetime) -> List[Artifact]:
+    def get_artifacts_in_range(self, profile_id: str, start_date: datetime, end_date: datetime, artifact_type: Optional[str] = None) -> List[Artifact]:
         """
         Retrieves artifacts for a profile within a specific date range (inclusive).
         """
-        return self.repo.get_artifacts_by_date_range(profile_id, start_date, end_date)
+        return self.repo.get_artifacts_by_date_range(profile_id, start_date, end_date, artifact_type=artifact_type)
 
     def get_recent_artifacts(self, profile_id: str, days: int = 7) -> List[Artifact]:
         """
