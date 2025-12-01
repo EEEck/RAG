@@ -17,38 +17,46 @@ def search(req: SearchRequest) -> SearchResponse:
     profile_service = get_profile_service()
 
     book_ids = None
+    user_id = None
+    profile = None
 
+    # 1. Resolve Profile & User ID
+    if req.profile_id:
+        profile = profile_service.get_profile(req.profile_id)
+        if profile:
+            user_id = profile.user_id
+        elif req.strict_mode:
+            # If strict mode requires profile, and it's not found -> 404
+            raise HTTPException(status_code=404, detail="Profile not found.")
+
+    # 2. Determine Book Context
     if req.strict_mode:
-        # Strict Mode: Use Profile's book_list ONLY
         if not req.profile_id:
             raise HTTPException(status_code=400, detail="Profile ID is required in strict mode.")
 
-        profile = profile_service.get_profile(req.profile_id)
-        if not profile:
-            raise HTTPException(status_code=404, detail="Profile not found.")
+        # At this point, if profile_id is set, we either have a profile or raised 404 above.
+        # But if profile_id was set but profile is None (and not strict mode), we continue.
+        # Wait, if strict_mode is True, we raised 404. So profile is guaranteed here.
 
-        # If profile has no books assigned, raise 400
         if not profile.book_list:
             raise HTTPException(
                 status_code=400,
                 detail="Strict mode is on but no books are assigned to this profile. Please add books or disable strict mode."
             )
 
-        # Use only the profile's books
         book_ids = profile.book_list
-
     else:
-        # Normal Mode:
-        # If strict_mode is False, we rely on the explicit book_id if provided.
-        # We ignore profile-based restrictions.
+        # Normal Mode: Explicit book_id overrides everything else
         if req.book_id:
             book_ids = [req.book_id]
 
+    # 3. Execute Search with Privacy Scope
     response = search_service.search_content(
         query=req.query,
         limit=req.top_lessons + req.top_vocab,
         max_unit=req.max_unit,
         max_sequence_index=req.max_sequence_index,
-        book_ids=book_ids
+        book_ids=book_ids,
+        user_id=user_id
     )
     return response
