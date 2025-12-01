@@ -9,6 +9,7 @@ from .connection import get_connection
 # Postgres Schema
 POSTGRES_SCHEMA_SQL = """
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- 1. Structure Nodes
 CREATE TABLE IF NOT EXISTS structure_nodes (
@@ -80,18 +81,40 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
                 cur.executemany(query, data)
             conn.commit()
 
-    def list_books(self, subject: str, level: Optional[int] = None, min_level: Optional[int] = None, max_level: Optional[int] = None) -> List[Dict[str, Any]]:
+    def list_books(self, subject: str, title: Optional[str] = None, level: Optional[int] = None, min_level: Optional[int] = None, max_level: Optional[int] = None, excluded_subjects: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
-        Lists available books filtering by subject and grade level using JSONB operators.
+        Lists available books filtering by subject and grade level.
+
+        Args:
+            subject: The subject to filter by. If 'other', looks for subjects NOT in excluded_subjects.
+            title: Optional title search. Uses fuzzy matching (pg_trgm) and partial match (ILIKE).
+            excluded_subjects: List of subjects to exclude when searching for 'other'.
         """
         # Base query for root nodes
         query = """
             SELECT book_id, title, meta_data
             FROM structure_nodes
             WHERE node_level = 0
-            AND meta_data->>'subject' = %s
         """
-        params = [subject]
+        params = []
+
+        # Subject Logic
+        if subject.lower() == 'other' and excluded_subjects:
+            query += " AND (meta_data->>'subject') != ALL(%s)"
+            params.append(excluded_subjects)
+        else:
+            query += " AND meta_data->>'subject' = %s"
+            params.append(subject)
+
+        # Title Logic (Fuzzy + Partial)
+        if title:
+            # Combined check:
+            # 1. ILIKE for standard partial matches (e.g. "Math" matches "Math 1")
+            # 2. % operator (pg_trgm) for fuzzy/typo matches (e.g. "Mth" matches "Math 1")
+            # Note: We assume pg_trgm extension is enabled.
+            query += " AND (title ILIKE %s OR title % %s)"
+            params.append(f"%{title}%")
+            params.append(title)
 
         # Add level filtering
         if level is not None:
@@ -102,12 +125,16 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
             params.append(min_level)
             params.append(max_level)
 
-        # Limit default to 20 to prevent data dump as per requirements
+        # Limit default to 20
         query += " LIMIT 20;"
 
         books = []
         with self.get_connection() as conn:
             with conn.cursor() as cur:
+                # Set similarity threshold for this session to be strict enough but allow typos
+                # Default is 0.3, maybe set to 0.2? 0.3 is usually fine.
+                # cur.execute("SELECT set_limit(0.3);")
+
                 cur.execute(query, params)
                 rows = cur.fetchall()
                 for row in rows:
