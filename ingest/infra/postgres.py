@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS structure_nodes (
 );
 CREATE INDEX IF NOT EXISTS idx_structure_nodes_owner_id ON structure_nodes(owner_id);
 
+CREATE INDEX IF NOT EXISTS idx_structure_nodes_owner ON structure_nodes(owner_id);
+
 -- Pedagogy Strategies (Global + User Extensions)
 -- Added owner_id for future user-specific logic
 CREATE TABLE IF NOT EXISTS pedagogy_strategies (

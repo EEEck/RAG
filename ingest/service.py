@@ -38,7 +38,8 @@ class IngestionService:
         self,
         file_path: str,
         book_id: Optional[uuid.UUID] = None,
-        category: Optional[str] = None
+        category: Optional[str] = None,
+        owner_id: Optional[str] = None
     ) -> None:
         """
         Main entry point for ingesting a book.
@@ -48,18 +49,25 @@ class IngestionService:
 
         print(f"--- Starting Ingestion for Book ID: {book_id} ---")
         print(f"Source: {file_path}")
+        if owner_id:
+            print(f"Owner ID: {owner_id}")
 
         # 1. Parse Document
         nodes, atoms, detected_category = self._parse_document(file_path, book_id, category)
         print(f"Parsed {len(nodes)} structure nodes and {len(atoms)} content atoms. Category: {detected_category}")
 
-        # 2. Persist Structure Nodes
+        # 2. Assign owner_id if present
+        if owner_id:
+            for node in nodes:
+                node.owner_id = owner_id
+
+        # 3. Persist Structure Nodes
         self._persist_structure(nodes)
 
-        # 3. Index Content Atoms
-        self._index_content(atoms, nodes)
+        # 4. Index Content Atoms
+        self._index_content(atoms, nodes, owner_id)
 
-        # 4. Trigger Async Tasks (if applicable)
+        # 5. Trigger Async Tasks (if applicable)
         self._trigger_async_tasks()
 
         print("Ingestion complete.")
@@ -132,7 +140,7 @@ class IngestionService:
             print(f"Error during structure node insertion: {e}")
             raise
 
-    def _index_content(self, atoms: List[ContentAtom], nodes: List[StructureNode]) -> None:
+    def _index_content(self, atoms: List[ContentAtom], nodes: List[StructureNode], owner_id: Optional[str] = None) -> None:
         """
         Converts atoms to LlamaIndex Nodes and persists them.
         """
@@ -157,6 +165,10 @@ class IngestionService:
 
             if sequence_map and str(atom.node_id) in sequence_map:
                 metadata["sequence_index"] = sequence_map[str(atom.node_id)]
+
+            # Inject owner_id if present
+            if owner_id:
+                metadata["owner_id"] = owner_id
 
             node = TextNode(
                 text=atom.content_text,
