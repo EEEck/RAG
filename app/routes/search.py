@@ -27,7 +27,14 @@ def search(req: SearchRequest) -> SearchResponse:
         if not profile:
             raise HTTPException(status_code=404, detail="Profile not found.")
 
-        # Use only the profile's books (even if empty, which means search nothing)
+        # If profile has no books assigned, raise 400
+        if not profile.book_list:
+            raise HTTPException(
+                status_code=400,
+                detail="Strict mode is on but no books are assigned to this profile. Please add books or disable strict mode."
+            )
+
+        # Use only the profile's books
         book_ids = profile.book_list
 
     else:
