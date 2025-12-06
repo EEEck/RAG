@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+import sys
+from unittest.mock import MagicMock
+
+# Mock docling if not present to allow collection of tests relying on it
+try:
+    import docling
+except ImportError:
+    sys.modules["docling"] = MagicMock()
+    sys.modules["docling.document_converter"] = MagicMock()
+
 from pathlib import Path
 from typing import List
 
@@ -41,4 +51,3 @@ def toy_lessons(toy_blocks, seg_rules) -> List:
 def toy_vocab(toy_blocks, seg_rules, toy_lessons) -> List:
     vocab = extract_vocab_entries(toy_blocks, seg_rules, textbook_id="toy-green-line-1")
     return link_vocab_to_lessons(vocab, toy_lessons)
-

@@ -99,7 +99,7 @@ def mock_get_connection(sqlite_db):
 def profile_service(sqlite_db):
     # Patch get_connection to use our sqlite wrapper
     with patch("app.services.profile_service.get_connection") as mock_conn:
-        mock_conn.side_effect = lambda: mock_get_connection(sqlite_db)
+        mock_conn.side_effect = lambda *args, **kwargs: mock_get_connection(sqlite_db)
         yield ProfileService()
 
 def test_create_profile(profile_service):
