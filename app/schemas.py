@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BookResponse(BaseModel):
@@ -133,3 +133,53 @@ class TeacherProfile(BaseModel):
     pedagogy_config: PedagogyConfig = PedagogyConfig()
     content_scope: ContentScope = ContentScope()
     book_list: List[str] = []
+
+
+# Agent Schemas
+
+class AgentMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+
+class QuizPlan(BaseModel):
+    """Plan to generate a quiz."""
+    tool_name: Literal["generate_quiz"] = "generate_quiz"
+    book_id: str = Field(..., description="The ID of the textbook.")
+    unit: int = Field(..., description="The unit number.")
+    topic: str = Field(..., description="The topic of the quiz.")
+    description: str = Field(..., description="A short summary of what will be generated.")
+
+
+class SearchPlan(BaseModel):
+    """Plan to search for content."""
+    tool_name: Literal["search_content"] = "search_content"
+    query: str = Field(..., description="The search query.")
+    book_id: Optional[str] = Field(None, description="Optional book ID to filter by.")
+    unit: Optional[int] = Field(None, description="Optional unit to filter by.")
+    description: str = Field(..., description="A short summary of what will be searched.")
+
+class Clarification(BaseModel):
+    """Request for more information from the user."""
+    tool_name: Literal["ask_user"] = "ask_user"
+    question: str = Field(..., description="The clarifying question to ask the user.")
+
+
+# Union type for the agent's output
+AgentOutput = Union[QuizPlan, SearchPlan, Clarification]
+
+
+class AgentChatRequest(BaseModel):
+    messages: List[AgentMessage]
+    profile_id: Optional[str] = None
+
+
+class AgentChatResponse(BaseModel):
+    status: Literal["incomplete", "ready"]
+    message: str
+    plan: Optional[Union[QuizPlan, SearchPlan]] = None
+
+
+class ExecutePlanRequest(BaseModel):
+    plan: Union[QuizPlan, SearchPlan]
+    profile_id: Optional[str] = None
