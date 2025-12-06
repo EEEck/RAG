@@ -16,3 +16,5 @@ redis
 llama-parse
 pydantic
 pymupdf
+pydantic-ai
+pydantic-settings
