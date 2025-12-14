@@ -20,8 +20,13 @@ PAGE_NO = 1
 def enricher():
     # Mock connection to avoid real DB access
     with patch("ingest.vision_enricher.get_connection") as mock_conn:
-        with patch("ingest.vision_enricher.OpenAI") as mock_openai: # Mock OpenAI client init
+        with patch("ingest.vision_enricher.create_agent") as mock_create_agent:
+             # Create a mock agent
+             mock_agent = MagicMock()
+             mock_create_agent.return_value = mock_agent
+
              enricher = VisionEnricher()
+             enricher.mock_agent = mock_agent # Helper to access mock
              yield enricher
 
 def test_crop_image_real_pdf(enricher):
@@ -34,8 +39,6 @@ def test_crop_image_real_pdf(enricher):
     image_bytes = enricher.crop_image_from_pdf(PDF_PATH, PAGE_NO, DOCLING_BBOX)
     assert image_bytes is not None
     assert len(image_bytes) > 0
-
-    # Verify it is a valid image by checking signature (PNG)
     # PNG signature: 89 50 4E 47 0D 0A 1A 0A
     assert image_bytes[:8] == b'\x89PNG\r\n\x1a\n'
 
@@ -58,23 +61,20 @@ def test_full_flow_mocked(mock_embed, mock_index, mock_pg, enricher):
     ])
 
     # Mock crop_image to return dummy bytes
-    # We mock the method on the instance
     original_crop = enricher.crop_image_from_pdf
     enricher.crop_image_from_pdf = MagicMock(return_value=b"fake_image_data")
 
-    # Mock OpenAI generation
-    mock_response = MagicMock()
-    mock_response.choices = [
-        MagicMock(message=MagicMock(content="A nice diagram."))
-    ]
-    enricher.client.chat.completions.create.return_value = mock_response
+    # Mock Agent generation
+    mock_result = MagicMock()
+    mock_result.data = "A nice diagram."
+    enricher.mock_agent.run_sync.return_value = mock_result
 
     # Run process
     enricher.process_batch(batch_size=1)
 
     # Verify interactions
     enricher.crop_image_from_pdf.assert_called_once()
-    enricher.client.chat.completions.create.assert_called_once()
+    enricher.mock_agent.run_sync.assert_called_once()
 
     # Verify persistence
     assert mock_pg.from_params.called

@@ -30,7 +30,12 @@ class Settings(BaseSettings):
     postgres_user_db: str | None = None
 
     embed_model: str = "text-embedding-3-large"
-    chat_model: str = "gpt-4.1-mini"
+    chat_model: str = "gpt-4.1-mini"  # Deprecated in favor of llm_model
+
+    # PydanticAI Model Configuration
+    # Format: provider:model_name (e.g., openai:gpt-4o, anthropic:claude-3-5-sonnet-latest)
+    llm_model: str = "openai:gpt-4o"
+    vlm_model: str = "openai:gpt-4o"
 
     model_config = {
         "env_file": ".env",

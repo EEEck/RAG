@@ -5,11 +5,12 @@ import base64
 from typing import List, Optional, Dict, Type, Union, Literal
 from pydantic import BaseModel, Field
 import fitz  # PyMuPDF
-from openai import AsyncOpenAI
+from pydantic_ai import BinaryContent
+from app.agent_factory import create_agent
+from app.config import get_settings
 from .schemas import LanguageMetadata, STEMMetadata, HistoryMetadata, BaseMetadata
 
 # --- Configuration ---
-MODEL_NAME = "gpt-4o"
 MAX_CONCURRENT_PAGES = 5
 
 # --- Helper to create dynamic models ---
@@ -28,70 +29,33 @@ def create_page_model(metadata_cls: Type[BaseMetadata]):
 # --- The Ingestor Class ---
 class OpenAIIngestor:
     def __init__(self, api_key: str):
-        self.client = AsyncOpenAI(api_key=api_key)
+        # API key is now handled by pydantic-ai via env vars or config,
+        # but we keep signature for compatibility or remove it.
+        # The caller (IngestionService) might pass it.
+        # We can ignore it if pydantic-ai handles it.
         self.semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
 
-    def _pdf_page_to_base64_image(self, doc, page_num):
-        """Converts a PDF page to a base64 encoded JPEG image."""
+    def _pdf_page_to_bytes(self, doc, page_num) -> bytes:
+        """Converts a PDF page to JPEG bytes."""
         page = doc.load_page(page_num)
         # dpi=150 is usually sufficient for OCR and keeps token count lower
         pix = page.get_pixmap(dpi=150)
-        img_data = pix.tobytes("jpeg")
-        return base64.b64encode(img_data).decode('utf-8')
+        return pix.tobytes("jpeg")
 
-    async def process_page(self, page_num: int, b64_image: str, category: str = "language") -> dict:
-        """Sends one page image to OpenAI and requests structured JSON."""
-
-        # Select Schema
-        if category == "stem":
-            metadata_cls = STEMMetadata
-        elif category == "history":
-            metadata_cls = HistoryMetadata
-        else:
-            metadata_cls = LanguageMetadata
-
-        PageModel = create_page_model(metadata_cls)
-
-        prompt = f"""
-        You are an expert Educational Content Parser for {category} textbooks.
-        Analyze this textbook page image. Extract the content into a structured format.
-
-        Guidelines:
-        1. Identify the Unit Number and Lesson Title from headers.
-        2. Extract text blocks.
-        3. Populate the 'meta_data' fields strictly according to the schema for {category}.
-           - content_type must be one of: "text", "image", "exercise", "table", "vocab", "image_desc", "grammar", "equation"
-        4. For images, write a detailed visual description in 'content' and set content_type to 'image_desc'.
-        5. Ignore page numbers, headers, and copyright text in the main content (but capture unit/title).
-        """
+    async def process_page(self, agent, page_num: int, image_bytes: bytes, prompt: str) -> dict:
+        """Sends one page image to Agent."""
 
         async with self.semaphore:
             try:
-                response = await self.client.beta.chat.completions.parse(
-                    model=MODEL_NAME,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a helpful assistant that extracts structured data from document images."
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:image/jpeg;base64,{b64_image}"
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    response_format=PageModel
+                # PydanticAI VLM call
+                result = await agent.run(
+                    [
+                        prompt,
+                        BinaryContent(data=image_bytes, media_type='image/jpeg')
+                    ]
                 )
 
-                # The response is parsed into the Pydantic model
-                page_content = response.choices[0].message.parsed
+                page_content = result.data
 
                 return {
                     "page_number": page_num + 1,
@@ -112,16 +76,49 @@ class OpenAIIngestor:
         print(f"Opening {pdf_path}...")
         doc = fitz.open(pdf_path)
         total_pages = len(doc)
-        print(f"Found {total_pages} pages. Starting ingestion with {MODEL_NAME} for category: {category}...")
+
+        settings = get_settings()
+        print(f"Found {total_pages} pages. Starting ingestion with {settings.vlm_model} for category: {category}...")
+
+        # 1. Determine Model
+        if category == "stem":
+            metadata_cls = STEMMetadata
+        elif category == "history":
+            metadata_cls = HistoryMetadata
+        else:
+            metadata_cls = LanguageMetadata
+
+        PageModel = create_page_model(metadata_cls)
+
+        # 2. Create Agent
+        system_prompt = "You are a helpful assistant that extracts structured data from document images."
+        prompt = f"""
+        You are an expert Educational Content Parser for {category} textbooks.
+        Analyze this textbook page image. Extract the content into a structured format.
+
+        Guidelines:
+        1. Identify the Unit Number and Lesson Title from headers.
+        2. Extract text blocks.
+        3. Populate the 'meta_data' fields strictly according to the schema for {category}.
+           - content_type must be one of: "text", "image", "exercise", "table", "vocab", "image_desc", "grammar", "equation"
+        4. For images, write a detailed visual description in 'content' and set content_type to 'image_desc'.
+        5. Ignore page numbers, headers, and copyright text in the main content (but capture unit/title).
+        """
+
+        agent = create_agent(
+            result_type=PageModel,
+            system_prompt=system_prompt,
+            model_override=settings.vlm_model
+        )
 
         tasks = []
         for i in range(total_pages):
-            # Prepare the image locally (fast)
-            b64_img = self._pdf_page_to_base64_image(doc, i)
+            # Prepare the image locally
+            img_bytes = self._pdf_page_to_bytes(doc, i)
             # Schedule the API call
-            tasks.append(self.process_page(i, b64_img, category))
+            tasks.append(self.process_page(agent, i, img_bytes, prompt))
 
-        # Run all tasks concurrently (controlled by semaphore)
+        # Run all tasks concurrently
         results = await asyncio.gather(*tasks)
 
         # Close PDF

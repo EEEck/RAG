@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 import sys
 from unittest.mock import MagicMock
+
+# Set mock API key for testing to avoid pydantic-ai import errors during collection
+os.environ.setdefault("OPENAI_API_KEY", "sk-mock-key-for-testing")
 
 # Mock docling if not present to allow collection of tests relying on it
 try:
