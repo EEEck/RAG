@@ -17,13 +17,12 @@ from app.celery_worker import generate_quiz_task
 from app.services.search_service import get_search_service
 from app.services.profile_service import get_profile_service
 from app.services.books_service import get_book_service
+from app.agent_factory import create_agent
 
-# Define the PydanticAI Agent
-# We use a Union return type so the agent can either Plan or Ask.
-agent = Agent(
-    'openai:gpt-4o',
+# Define the PydanticAI Agent via Factory
+agent = create_agent(
+    result_type=AgentOutput,
     deps_type=Optional[str],  # profile_id
-    output_type=AgentOutput,
     system_prompt=(
         "You are a helpful Teaching Assistant Agent. Your goal is to help teachers create lesson plans, quizzes, and find content.\n"
         "You DO NOT execute the actions yourself. Instead, you create a PLAN for the action.\n"
@@ -109,7 +108,6 @@ class AgentService:
                     plan=output
                 )
             else:
-                # Should not be reachable if type safety works, but good fallback
                 return AgentChatResponse(status="incomplete", message="I'm not sure what to do.")
 
         except Exception as e:
@@ -122,25 +120,16 @@ class AgentService:
         """
         plan = request.plan
 
-        # Security Check: Verify book_id ownership if profile_id provided
         if request.profile_id and plan.book_id:
             try:
                 profile_service = get_profile_service()
                 profile = profile_service.get_profile(request.profile_id)
-
-                # If profile exists, check if book_id is in its list
-                # If profile has no books, we assume strict mode might block it,
-                # but here we just check if book is accessible.
-                # If plan.book_id is NOT in profile.book_list, we should block.
-                # NOTE: If user searches Global content (no book_id), that's fine.
-                # But if they specify a book_id, it must be theirs (if they have a profile context).
 
                 if profile and profile.book_list:
                      if plan.book_id not in profile.book_list:
                          return {"status": "error", "message": f"Access denied. Book {plan.book_id} is not in your profile."}
             except Exception as e:
                 print(f"Security Check Error: {e}")
-                # Fail safe? Or allow? Safer to fail.
                 return {"status": "error", "message": "Security validation failed."}
 
         if isinstance(plan, QuizPlan):
