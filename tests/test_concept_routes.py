@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from app.main import app
+from app.schemas import GeneratedItem
 
 client = TestClient(app)
 
@@ -67,23 +68,23 @@ def test_concept_pack_not_found(mock_get_settings, mock_get_conn):
             "lesson_code": "MISSING"
         })
 
-@patch("app.services.generation.get_sync_client")
+@patch("app.services.generation.create_agent")
 @patch("app.services.generation.get_settings")
-def test_generate_items_route(mock_get_settings, mock_get_client):
+def test_generate_items_route(mock_get_settings, mock_create_agent):
     mock_settings = MagicMock()
-    mock_settings.chat_model = "gpt-4"
+    mock_settings.llm_model = "gpt-4"
     mock_get_settings.return_value = mock_settings
 
-    mock_client = MagicMock()
-    mock_get_client.return_value = mock_client
+    mock_agent = MagicMock()
+    mock_create_agent.return_value = mock_agent
 
     # Mock LLM response
-    mock_completion = MagicMock()
-    # Correctly mock the OpenAI API structure: completion.choices[0].message.content
-    mock_choice = MagicMock()
-    mock_choice.message.content = '{"items": [{"stem": "Q1", "answer": "A1"}]}'
-    mock_completion.choices = [mock_choice]
-    mock_client.chat.completions.create.return_value = mock_completion
+    mock_result = MagicMock()
+    # GeneratedItemList
+    # We use dict for output because response.json() will be compared
+    item = GeneratedItem(stem="Q1", answer="A1", options=None)
+    mock_result.data.items = [item]
+    mock_agent.run_sync.return_value = mock_result
 
     response = client.post("/concept/generate-items", json={
         "textbook_id": "TB1",
@@ -100,20 +101,17 @@ def test_generate_items_route(mock_get_settings, mock_get_client):
     assert len(data["items"]) == 1
     assert data["items"][0]["stem"] == "Q1"
 
-@patch("app.services.generation.get_sync_client")
+@patch("app.services.generation.create_agent")
 @patch("app.services.generation.get_settings")
-def test_generate_items_bad_json(mock_get_settings, mock_get_client):
+def test_generate_items_bad_json(mock_get_settings, mock_create_agent):
     mock_settings = MagicMock()
     mock_get_settings.return_value = mock_settings
-    mock_client = MagicMock()
-    mock_get_client.return_value = mock_client
 
-    # Mock LLM response with bad JSON
-    mock_completion = MagicMock()
-    mock_choice = MagicMock()
-    mock_choice.message.content = 'Not valid JSON'
-    mock_completion.choices = [mock_choice]
-    mock_client.chat.completions.create.return_value = mock_completion
+    mock_agent = MagicMock()
+    mock_create_agent.return_value = mock_agent
+
+    # Mock Exception during run_sync (simulating pydantic validation error or similar)
+    mock_agent.run_sync.side_effect = Exception("Validation Error")
 
     response = client.post("/concept/generate-items", json={
         "textbook_id": "TB1",
