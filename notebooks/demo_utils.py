@@ -82,15 +82,8 @@ def ingest_book(file_path: str, book_id: uuid.UUID, category: str = "language", 
         raise
 
     # Check if book exists
-    # This is a bit hacky since repo doesn't have "exists" method exposed easily,
-    # but we can query structure_nodes.
-    conn = repo.get_connection()
-    with conn.cursor() as cur:
-        cur.execute("SELECT count(*) FROM structure_nodes WHERE book_id = %s", (str(book_id),))
-        count = cur.fetchone()[0]
-
-    if count > 0 and not force:
-        print(f"📚 Book {book_id} already exists ({count} nodes). Skipping ingestion.")
+    if repo.exists(book_id) and not force:
+        print(f"📚 Book {book_id} already exists. Skipping ingestion.")
         return
 
     print(f"🚀 Starting Ingestion for {file_path}...")

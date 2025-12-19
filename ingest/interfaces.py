@@ -20,6 +20,10 @@ class StructureNodeRepository(Protocol):
         """
         ...
 
+    def exists(self, book_id: uuid.UUID) -> bool:
+        """Checks if a book exists in the repository."""
+        ...
+
 class Ingestor(Protocol):
     """Interface for document ingestion strategies."""
 

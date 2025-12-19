@@ -57,3 +57,13 @@ class SQLiteStructureNodeRepository(StructureNodeRepository):
         with self.get_connection() as conn:
             conn.executemany(query, data)
             conn.commit()
+
+    def list_books(self, subject: str, level: int = None, min_level: int = None, max_level: int = None) -> List[dict]:
+        return []
+
+    def exists(self, book_id: str) -> bool:
+        """Checks if a book exists in the repository."""
+        query = "SELECT 1 FROM structure_nodes WHERE book_id = ? LIMIT 1"
+        with self.get_connection() as conn:
+            cursor = conn.execute(query, (str(book_id),))
+            return cursor.fetchone() is not None
