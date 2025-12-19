@@ -180,6 +180,14 @@ class PostgresStructureNodeRepository(StructureNodeRepository):
                     })
         return books
 
+    def exists(self, book_id: Any) -> bool:
+        """Checks if a book exists in the repository."""
+        query = "SELECT 1 FROM structure_nodes WHERE book_id = %s LIMIT 1"
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (str(book_id),))
+                return cur.fetchone() is not None
+
 class PostgresUserRepository:
     """Helper to manage User DB Schema."""
 

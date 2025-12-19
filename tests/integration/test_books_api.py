@@ -17,6 +17,9 @@ class MockStructureNodeRepository:
     def insert_structure_nodes(self, nodes):
         pass
 
+    def exists(self, book_id):
+        return any(b["book_id"] == str(book_id) for b in self.books_data)
+
     def list_books(self, subject: str, title: Optional[str] = None, level: Optional[int] = None, min_level: Optional[int] = None, max_level: Optional[int] = None, excluded_subjects: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         results = []
         for b in self.books_data:
