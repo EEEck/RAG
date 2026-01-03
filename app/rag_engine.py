@@ -45,7 +45,7 @@ def retrieve_and_generate(
         query=topic,
         limit=10, # Combine previous top_lessons + top_vocab
         max_unit=unit,
-        book_id=book_id
+        book_ids=[book_id]
     )
 
     atoms = search_response.atoms if search_response.atoms else []

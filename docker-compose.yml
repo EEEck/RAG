@@ -1,23 +1,29 @@
 version: "3.9"
 
+x-app-base: &app_base
+  build:
+    context: .
+  image: rag_app
+  env_file: .env
+  environment:
+    - POSTGRES_CONTENT_HOST=db_content
+    - POSTGRES_USER_HOST=db_user
+    - REDIS_HOST=redis
+  volumes:
+    - .:/app
+  depends_on:
+    - db_content
+    - db_user
+    - redis
+  restart: unless-stopped
+
 services:
   app:
-    build: .
+    <<: *app_base
     container_name: rag_app
-    env_file: .env
-    environment:
-      - POSTGRES_CONTENT_HOST=db_content
-      - POSTGRES_USER_HOST=db_user
-      - REDIS_HOST=redis
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-    volumes:
-      - .:/app
     ports:
       - "8000:8000"
-    depends_on:
-      - db_content
-      - db_user
-      - redis
 
   db_content:
     image: pgvector/pgvector:pg16
@@ -30,6 +36,11 @@ services:
       - "5433:5432"
     volumes:
       - pgdata_content:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rag} -d ${POSTGRES_DB:-rag}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   db_user:
     image: pgvector/pgvector:pg16
@@ -42,28 +53,30 @@ services:
       - "5434:5432"
     volumes:
       - pgdata_user:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rag} -d ${POSTGRES_DB:-rag}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     container_name: rag_redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
   worker:
-    build: .
+    <<: *app_base
     container_name: rag_worker
-    env_file: .env
-    environment:
-      - POSTGRES_CONTENT_HOST=db_content
-      - POSTGRES_USER_HOST=db_user
-      - REDIS_HOST=redis
     command: ["celery", "-A", "app.celery_worker.celery", "worker", "--loglevel=info"]
-    volumes:
-      - .:/app
-    depends_on:
-      - redis
-      - db_content
-      - db_user
+    profiles:
+      - worker
 
 volumes:
   pgdata_content:

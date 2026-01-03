@@ -15,7 +15,7 @@ from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.embeddings.openai import OpenAIEmbedding
 
-from ingest.infra.connection import get_connection
+from ingest.infra.connection import get_connection, get_db_params
 from .models import ContentAtom
 from app.agent_factory import create_agent
 from app.config import get_settings
@@ -140,12 +140,13 @@ class VisionEnricher:
         if not nodes:
             return
 
+        params = get_db_params(db_type="content")
         vector_store = PGVectorStore.from_params(
-            database=os.getenv("POSTGRES_DB", "rag"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
-            password=os.getenv("POSTGRES_PASSWORD", "rag"),
-            port=int(os.getenv("POSTGRES_PORT", 5432)),
-            user=os.getenv("POSTGRES_USER", "rag"),
+            database=params["dbname"],
+            host=params["host"],
+            password=params["password"],
+            port=int(params["port"]),
+            user=params["user"],
             table_name="content_atoms",
             embed_dim=1536
         )

@@ -61,7 +61,7 @@ class ArtifactRepository:
             SELECT id, profile_id, type, content, summary, created_at, embedding, related_book_ids, topic_tags
             FROM class_artifacts
             WHERE profile_id = %s
-            ORDER BY embedding <=> %s
+            ORDER BY embedding <=> %s::vector
             LIMIT %s;
             """
             params = (profile_id, query_embedding, limit)

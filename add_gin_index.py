@@ -1,10 +1,16 @@
 import os
 from dotenv import load_dotenv
 
+from ingest.infra.connection import get_db_params
+
 load_dotenv()
 
 def add_gin_index():
-    dsn = f"postgresql://{os.getenv('POSTGRES_USER', 'rag')}:{os.getenv('POSTGRES_PASSWORD', 'rag')}@{os.getenv('POSTGRES_HOST', 'localhost')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_DB', 'rag')}"
+    params = get_db_params(db_type="content")
+    dsn = (
+        f"postgresql://{params['user']}:{params['password']}"
+        f"@{params['host']}:{params['port']}/{params['dbname']}"
+    )
 
     # Try importing psycopg (v3) first, then fallback to psycopg2
     try:

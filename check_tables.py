@@ -2,6 +2,8 @@ import psycopg
 import os
 import sys
 
+from ingest.infra.connection import get_db_params
+
 try:
     import fitz
     print("PyMuPDF (fitz) is installed.")
@@ -16,11 +18,13 @@ except ImportError:
 
 def check_tables():
     try:
+        params = get_db_params(db_type="content")
         conn = psycopg.connect(
-            host=os.getenv("POSTGRES_HOST", "localhost"),
-            dbname=os.getenv("POSTGRES_DB", "rag"),
-            user=os.getenv("POSTGRES_USER", "rag"),
-            password=os.getenv("POSTGRES_PASSWORD", "rag")
+            host=params["host"],
+            dbname=params["dbname"],
+            user=params["user"],
+            password=params["password"],
+            port=params["port"]
         )
         cur = conn.cursor()
         cur.execute("""

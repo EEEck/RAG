@@ -13,7 +13,8 @@ def test_health():
 @patch("app.main.os.getenv")
 def test_config_preview(mock_getenv, mock_get_settings):
     mock_settings = MagicMock()
-    mock_settings.pg_dsn = "postgres://user:pass@localhost:5432/db"
+    mock_settings.pg_content_dsn = "postgres://user:pass@localhost:5432/content"
+    mock_settings.pg_user_dsn = "postgres://user:pass@localhost:5432/user"
     mock_settings.embed_model = "test-model"
     mock_get_settings.return_value = mock_settings
     mock_getenv.return_value = "fake-key"
@@ -22,7 +23,8 @@ def test_config_preview(mock_getenv, mock_get_settings):
     assert response.status_code == 200
     data = response.json()
     assert data["openai_key_present"] == "true"
-    assert data["postgres_dsn"] == "postgres://user:pass@localhost:5432/db"
+    assert data["postgres_content_dsn"] == "postgres://user:pass@localhost:5432/content"
+    assert data["postgres_user_dsn"] == "postgres://user:pass@localhost:5432/user"
     assert data["embed_model"] == "test-model"
 
 @patch("app.routes.search.get_search_service")

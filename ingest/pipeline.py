@@ -52,6 +52,7 @@ def index_atoms(
     from llama_index.vector_stores.postgres import PGVectorStore
     from llama_index.embeddings.openai import OpenAIEmbedding
     from llama_index.core.embeddings import MockEmbedding
+    from .infra.connection import get_db_params
 
     if not atoms:
         return None
@@ -65,6 +66,8 @@ def index_atoms(
             "atom_type": atom.atom_type,
             **meta_dict
         }
+        if meta_dict.get("unit_number") is not None and "unit" not in metadata:
+            metadata["unit"] = meta_dict["unit_number"]
         if sequence_map and str(atom.node_id) in sequence_map:
             metadata["sequence_index"] = sequence_map[str(atom.node_id)]
 
@@ -76,12 +79,13 @@ def index_atoms(
         nodes.append(node)
 
     if vector_store is None and storage_context is None:
+        params = get_db_params(db_type="content")
         vector_store = PGVectorStore.from_params(
-            database=os.getenv("POSTGRES_DB", "rag"),
-            host=os.getenv("POSTGRES_HOST", "localhost"),
-            password=os.getenv("POSTGRES_PASSWORD", "rag"),
-            port=int(os.getenv("POSTGRES_PORT", 5432)),
-            user=os.getenv("POSTGRES_USER", "rag"),
+            database=params["dbname"],
+            host=params["host"],
+            password=params["password"],
+            port=int(params["port"]),
+            user=params["user"],
             table_name="content_atoms",
             embed_dim=1536
         )
@@ -109,6 +113,7 @@ def run_ingestion(
     book_id: Optional[uuid.UUID] = None,
     should_mock_embedding: bool = False,
     category: Optional[str] = None,
+    owner_id: Optional[str] = None,
     structure_repo: Optional[StructureNodeRepository] = None,
     ingestor: Optional[Ingestor] = None,
     vector_store: Optional[Any] = None,
@@ -140,7 +145,24 @@ def run_ingestion(
     )
 
     # Run
-    service.ingest_book(file_path, book_id, category)
+    service.ingest_book(file_path, book_id, category, owner_id=owner_id)
 
 if __name__ == "__main__":
-    pass
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run ingestion for a single document.")
+    parser.add_argument("--file", required=True, help="Path to PDF/JSON/MD input.")
+    parser.add_argument("--book-id", default=None, help="Optional UUID for the book.")
+    parser.add_argument("--category", default=None, help="Optional subject category override.")
+    parser.add_argument("--owner-id", default=None, help="Optional owner_id for private content.")
+    parser.add_argument("--mock-embeddings", action="store_true", help="Use mock embeddings.")
+    args = parser.parse_args()
+
+    book_uuid = uuid.UUID(args.book_id) if args.book_id else None
+    run_ingestion(
+        file_path=args.file,
+        book_id=book_uuid,
+        should_mock_embedding=args.mock_embeddings,
+        category=args.category,
+        owner_id=args.owner_id,
+    )

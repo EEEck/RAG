@@ -61,7 +61,12 @@ def test_retrieve_and_generate(mock_generate, mock_memory_cls, mock_get_profile,
     mock_profile_service.get_profile.assert_called_with("p1")
 
     mock_get_search.assert_called_once()
-    mock_search_service.search_content.assert_called()
+    mock_search_service.search_content.assert_called_with(
+        query="topic",
+        limit=10,
+        max_unit=1,
+        book_ids=["book1"]
+    )
 
     mock_memory_cls.assert_called_once()
     mock_memory_service.search_artifacts.assert_called_with("p1", query="topic", limit=3)

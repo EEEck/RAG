@@ -2,7 +2,6 @@ import uuid
 import os
 import json
 from typing import List, Optional, Any, Tuple
-from pathlib import Path
 
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.schema import TextNode
@@ -12,7 +11,9 @@ from llama_index.core.embeddings import MockEmbedding
 
 from .models import StructureNode, ContentAtom
 from .interfaces import StructureNodeRepository, Ingestor
-from .classification import detect_book_category
+from .classification import detect_book_category, detect_book_metadata
+from .markdown_parser import load_markdown_sections, build_markdown_nodes_and_atoms
+from .infra.connection import get_db_params
 
 class IngestionService:
     """
@@ -85,7 +86,8 @@ class IngestionService:
         atoms = []
         detected_category = category
 
-        if str(file_path).endswith(".json"):
+        path_str = str(file_path)
+        if path_str.endswith(".json"):
             print("Detected JSON input. Loading directly...")
             with open(file_path, "r") as f:
                 data = json.load(f)
@@ -110,6 +112,30 @@ class IngestionService:
             # For JSON path (testing usually), defaults are acceptable.
 
             nodes, atoms = self.ingestor._parse_docling_structure(data, book_id, file_path, detected_category)
+        elif path_str.endswith(".md") or path_str.endswith(".markdown"):
+            print("Detected Markdown input. Parsing sections...")
+            sections = load_markdown_sections(file_path)
+
+            book_metadata = {}
+            if detected_category is None:
+                sample_text = "\n".join(s.body for s in sections[:3] if s.body)
+                metadata = detect_book_metadata(os.path.basename(path_str), sample_text)
+                detected_category = metadata["subject"]
+                book_metadata = metadata
+            else:
+                sample_text = "\n".join(s.body for s in sections[:3] if s.body)
+                metadata = detect_book_metadata(os.path.basename(path_str), sample_text)
+                book_metadata = {
+                    "subject": detected_category,
+                    "grade_level": metadata.get("grade_level", 1),
+                }
+
+            nodes, atoms = build_markdown_nodes_and_atoms(
+                sections=sections,
+                book_id=book_id,
+                category=detected_category or "language",
+                book_metadata=book_metadata,
+            )
         else:
             # If category is not provided, the ingestor might detect it internally or default.
             # The HybridIngestor does auto-detection internally if category is None.
@@ -163,6 +189,9 @@ class IngestionService:
                 **meta_dict
             }
 
+            if meta_dict.get("unit_number") is not None and "unit" not in metadata:
+                metadata["unit"] = meta_dict["unit_number"]
+
             if sequence_map and str(atom.node_id) in sequence_map:
                 metadata["sequence_index"] = sequence_map[str(atom.node_id)]
 
@@ -186,12 +215,13 @@ class IngestionService:
         # Setup Vector Store
         vector_store = self.vector_store
         if vector_store is None and self.storage_context is None:
+            params = get_db_params(db_type="content")
             vector_store = PGVectorStore.from_params(
-                database=os.getenv("POSTGRES_DB", "rag"),
-                host=os.getenv("POSTGRES_HOST", "localhost"),
-                password=os.getenv("POSTGRES_PASSWORD", "rag"),
-                port=int(os.getenv("POSTGRES_PORT", 5432)),
-                user=os.getenv("POSTGRES_USER", "rag"),
+                database=params["dbname"],
+                host=params["host"],
+                password=params["password"],
+                port=int(params["port"]),
+                user=params["user"],
                 table_name="content_atoms",
                 embed_dim=1536
             )

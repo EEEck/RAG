@@ -10,6 +10,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.core.vector_stores.types import MetadataFilters, MetadataFilter, FilterOperator, FilterCondition
 
 from ..schemas import LessonHit, VocabHit, AtomHit, SearchResponse
+from ingest.infra.connection import get_db_params
 
 class SearchService:
     """
@@ -138,12 +139,13 @@ def get_search_service() -> SearchService:
     """Factory to create the default SearchService with Postgres."""
 
     # Default to Postgres
+    params = get_db_params(db_type="content")
     vector_store = PGVectorStore.from_params(
-        database=os.getenv("POSTGRES_DB", "rag"),
-        host=os.getenv("POSTGRES_HOST", "localhost"),
-        password=os.getenv("POSTGRES_PASSWORD", "rag"),
-        port=int(os.getenv("POSTGRES_PORT", 5432)),
-        user=os.getenv("POSTGRES_USER", "rag"),
+        database=params["dbname"],
+        host=params["host"],
+        password=params["password"],
+        port=int(params["port"]),
+        user=params["user"],
         table_name="content_atoms",
         embed_dim=1536
     )

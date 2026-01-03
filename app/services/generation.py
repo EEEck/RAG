@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 from ..config import get_settings
@@ -64,6 +66,25 @@ class PromptFactory:
 class GeneratedItemList(BaseModel):
     items: List[GeneratedItem]
 
+def _extract_items(result: object) -> List[GeneratedItem]:
+    payload = None
+    for attr in ("data", "output", "result"):
+        if hasattr(result, attr):
+            payload = getattr(result, attr)
+            break
+    if payload is None:
+        raise AttributeError("Agent result has no data/output/result attribute")
+
+    if isinstance(payload, GeneratedItemList):
+        return payload.items
+    if isinstance(payload, dict) and "items" in payload:
+        return payload["items"]
+    if isinstance(payload, list):
+        return payload
+    if hasattr(payload, "items"):
+        return payload.items
+    raise ValueError("Agent result payload does not contain items")
+
 def generate_items(req: GenerateItemsRequest, pedagogy_config: PedagogyConfig = None) -> GenerateItemsResponse:
     """
     Use an LLM to generate items constrained by the given concept pack or provided context.
@@ -97,8 +118,18 @@ def generate_items(req: GenerateItemsRequest, pedagogy_config: PedagogyConfig = 
     # We use GeneratedItemList to ensure we get a list wrapped in an object, which is usually more robust for tool calling.
     try:
         agent = create_agent(result_type=GeneratedItemList, system_prompt=system_prompt)
-        result = agent.run_sync(prompt_content)
-        items = result.data.items
+        try:
+            asyncio.get_running_loop()
+            use_thread = True
+        except RuntimeError:
+            use_thread = False
+
+        if use_thread:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                result = executor.submit(agent.run_sync, prompt_content).result()
+        else:
+            result = agent.run_sync(prompt_content)
+        items = _extract_items(result)
     except Exception as e:
         print(f"Generation failed: {e}")
         return GenerateItemsResponse(items=[], scope_report=ScopeReport(violations=0, notes=[f"Error: {str(e)}"]))

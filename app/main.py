@@ -15,6 +15,7 @@ from .config import get_settings
 from .routes import search, concept, profiles, artifacts, books, agent
 from .celery_worker import generate_quiz_task
 from .infra.artifact_db import ArtifactRepository
+from ingest.infra.postgres import PostgresStructureNodeRepository
 
 # Load environment variables (expects OPENAI_API_KEY, PG creds in .env)
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
@@ -29,6 +30,13 @@ async def lifespan(app: FastAPI):
         print("Artifact DB schema verified.")
     except Exception as e:
         print(f"Warning: Failed to ensure Artifact DB schema: {e}")
+    try:
+        print("Ensuring Content DB schema...")
+        content_repo = PostgresStructureNodeRepository()
+        content_repo.ensure_schema()
+        print("Content DB schema verified.")
+    except Exception as e:
+        print(f"Warning: Failed to ensure Content DB schema: {e}")
     yield
     # Shutdown logic if needed
 
@@ -116,6 +124,7 @@ def config_preview() -> Dict[str, str | None]:
     settings = get_settings()
     return {
         "openai_key_present": "true" if os.getenv("OPENAI_API_KEY") else "false",
-        "postgres_dsn": settings.pg_dsn,
+        "postgres_content_dsn": settings.pg_content_dsn,
+        "postgres_user_dsn": settings.pg_user_dsn,
         "embed_model": settings.embed_model,
     }

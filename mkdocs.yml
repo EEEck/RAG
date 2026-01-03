@@ -30,3 +30,4 @@ nav:
   - Guides:
       - User Manual: user_manual.md
       - Database Fundamentals: data_base_fundamentals.md
+      - Production Checklist: production_checklist.md

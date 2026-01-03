@@ -1,5 +1,6 @@
 import os
 import json
+import uuid
 import psycopg
 from typing import List, Dict, Any, Optional
 from ..models import StructureNode
@@ -197,3 +198,45 @@ class PostgresUserRepository:
             with conn.cursor() as cur:
                 cur.execute(USER_SCHEMA_SQL)
             conn.commit()
+
+
+class PedagogyStrategyRepository:
+    """Repository for pedagogy strategies in the Content DB."""
+
+    def ensure_schema(self) -> None:
+        with get_connection(db_type="content") as conn:
+            with conn.cursor() as cur:
+                cur.execute(CONTENT_SCHEMA_SQL)
+            conn.commit()
+
+    def upsert_strategies(self, strategies: List[Dict[str, Any]]) -> int:
+        if not strategies:
+            return 0
+
+        query = """
+        INSERT INTO pedagogy_strategies (id, owner_id, content, meta_data)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (id) DO UPDATE SET
+            owner_id = EXCLUDED.owner_id,
+            content = EXCLUDED.content,
+            meta_data = EXCLUDED.meta_data;
+        """
+
+        rows = []
+        for strategy in strategies:
+            strategy_id = strategy.get("id") or uuid.uuid4()
+            rows.append(
+                (
+                    strategy_id,
+                    strategy.get("owner_id"),
+                    strategy.get("content", ""),
+                    json.dumps(strategy.get("meta_data") or {}),
+                )
+            )
+
+        with get_connection(db_type="content") as conn:
+            with conn.cursor() as cur:
+                cur.executemany(query, rows)
+            conn.commit()
+
+        return len(rows)
